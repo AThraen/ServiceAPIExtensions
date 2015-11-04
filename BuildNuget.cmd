@@ -1,0 +1,1 @@
+nuget pack ServiceAPIExtensions\ServiceAPIExtensions.csproj

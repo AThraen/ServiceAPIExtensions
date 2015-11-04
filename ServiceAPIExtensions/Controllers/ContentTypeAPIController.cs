@@ -70,22 +70,32 @@ namespace ServiceAPIExtensions.Controllers
 
 
         [HttpGet, Route("{ContentType}")]
-        public virtual HttpResponseMessage ContentTypeInfo(string ContentType)
+        public virtual IHttpActionResult ContentTypeInfo(string ContentType)
         {
             var ct = LocateContentType(ContentType);
-            if (ct == null) return Request.CreateResponse(HttpStatusCode.NotFound);
-            return Request.CreateResponse(HttpStatusCode.OK, ConstructExpandoObject(ct));
+            if (ct == null) return NotFound();
+            return Ok( ConstructExpandoObject(ct));
+        }
+
+        [HttpGet, Route("{ContentType}/zapierproperties")]
+        public virtual IHttpActionResult ContentTypeZapierProperties(string ContentType)
+        {
+            var ct = LocateContentType(ContentType);
+            if (ct == null) return NotFound();
+
+            return Ok(ct.PropertyDefinitions.Select(pd =>
+                new {key=pd.Name, type="unicode", required=false, label=pd.EditCaption, help_text=pd.HelpText}));
         }
 
 
         [HttpGet, Route("list")]
-        public virtual HttpResponseMessage ListContentTypes()
+        public virtual IHttpActionResult ListContentTypes()
         {
-            return Request.CreateResponse(HttpStatusCode.OK, _typerepo.List().Select(ct => ConstructExpandoObject(ct)).ToList());
+            return Ok( _typerepo.List().Select(ct => ConstructExpandoObject(ct)).ToList());
         }
 
         [HttpGet, Route("typefor/{MediaExtension}")]
-        public virtual HttpResponseMessage ContentTypeForMedia(string MediaExtension)
+        public virtual IHttpActionResult ContentTypeForMedia(string MediaExtension)
         {
             if(!MediaExtension.StartsWith("."))   MediaExtension="."+MediaExtension;
             var mediatype = _mediaDataResolver.GetFirstMatching(MediaExtension.ToLower()); //Extension contains .

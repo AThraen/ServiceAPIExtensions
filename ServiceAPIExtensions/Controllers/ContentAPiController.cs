@@ -54,11 +54,14 @@ namespace ServiceAPIExtensions.Controllers
 
 
         //TODO: Query
-        
-
         //Region: New approach - dynamic and Expando Objects
 
-        private ExpandoObject ConstructExpandoObject(IContent c, string Select=null)
+        public static ExpandoObject ConstructExpandoObject(IContent c, string Select=null)
+        {
+            return ConstructExpandoObject(c,true, Select);
+        }
+
+        public static ExpandoObject ConstructExpandoObject(IContent c, bool IncludeBinary,string Select=null)
         {
             dynamic e = new ExpandoObject();
             var dic=e as IDictionary<string,object>;
@@ -69,6 +72,23 @@ namespace ServiceAPIExtensions.Controllers
             e.ContentTypeID = c.ContentTypeID;
             //TODO: Resolve Content Type
             var parts = (Select == null) ? null : Select.Split(',');
+
+            if (c is MediaData)
+            {
+                dynamic Media = new ExpandoObject();
+                var md = c as MediaData;
+                Media.MimeType = md.MimeType;
+                Media.RouteSegment = md.RouteSegment;
+                if (IncludeBinary)
+                {
+                    using (var br = new BinaryReader(md.BinaryData.OpenRead()))
+                    {
+                        Media.Binary = Convert.ToBase64String(br.ReadBytes((int)br.BaseStream.Length));
+                    }
+                }
+                dic.Add("Media", Media);
+            }
+            
             foreach (var pi in c.Property)
             {
                 if (parts != null && (!parts.Contains(pi.Name))) continue;
@@ -111,61 +131,61 @@ namespace ServiceAPIExtensions.Controllers
             return e;
         }
 
-        [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/HttpGet, Route("{Reference}/{language?}")]
-        public virtual HttpResponseMessage GetContent(string Reference, string language=null, string Select=null)
+        [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/HttpGet, Route("{Reference}/{language?}",Name="GetContentRoute")]
+        public virtual IHttpActionResult GetContent(string Reference, string language=null, string Select=null)
         {
             var r=LookupRef(Reference);
-            if (r == ContentReference.EmptyReference) return Request.CreateResponse(HttpStatusCode.NotFound);
+            if (r == ContentReference.EmptyReference) return NotFound();
             var cnt = _repo.Get<IContent>(r);
-            if (cnt == null) return Request.CreateResponse(HttpStatusCode.NotFound);
+            if (cnt == null) return NotFound();
             
             //TODO: Check permissions for user to content
-            return Request.CreateResponse(HttpStatusCode.OK, ConstructExpandoObject(cnt, Select));
+            return Ok(ConstructExpandoObject(cnt, Select));
         }
 
         //TODO Languages, versions
 
         //TODO: Get Property, Put Property, Schedule Publish
         [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/HttpGet, Route("{Reference}/{Property}")]
-        public virtual HttpResponseMessage GetProperty(string Reference, string Property)
+        public virtual IHttpActionResult GetProperty(string Reference, string Property)
         {
             var r = LookupRef(Reference);
-            if (r == ContentReference.EmptyReference) return Request.CreateResponse(HttpStatusCode.NotFound);
+            if (r == ContentReference.EmptyReference) return NotFound();
             var cnt = _repo.Get<IContent>(r);
-            if (!cnt.Property.Contains(Property)) Request.CreateResponse(HttpStatusCode.NotFound);
-            return Request.CreateResponse(HttpStatusCode.OK,new {Property=cnt.Property[Property].ToWebString()});
+            if (!cnt.Property.Contains(Property)) NotFound();
+            return Ok(new {Property=cnt.Property[Property].ToWebString()});
         }
 
 
         [/*AuthorizePermission("EPiServerServiceApi", "WriteAccess"),*/HttpPost, Route("{Reference}/Publish")]
-        public virtual HttpResponseMessage PublishContent(string Reference)
+        public virtual IHttpActionResult PublishContent(string Reference)
         {
             var r = LookupRef(Reference);
-            if (r == ContentReference.EmptyReference) return Request.CreateResponse(HttpStatusCode.NotFound);
+            if (r == ContentReference.EmptyReference) return NotFound();
             _repo.Save(_repo.Get<IContent>(r), EPiServer.DataAccess.SaveAction.Publish);
-            return Request.CreateResponse(HttpStatusCode.OK);
+            return Ok();
         }
 
         [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/HttpGet, Route("{Reference}/children")]
-        public virtual HttpResponseMessage ListChildren(string Reference, string Select=null, int Skip=0, int Take=100)
+        public virtual IHttpActionResult ListChildren(string Reference, string Select = null, int Skip = 0, int Take = 100)
         {
             var r = LookupRef(Reference);
-            if (r == ContentReference.EmptyReference) return Request.CreateResponse(HttpStatusCode.NotFound);
+            if (r == ContentReference.EmptyReference) return NotFound();
             var children=_repo.GetChildren<IContent>(r).Skip(Skip).Take(Take).ToList();
             if (children.Count > 0)
             {
                 dynamic e = new ExpandoObject();
-                e.Children = children.Select(c => ConstructExpandoObject(c,Select)).ToArray();
-                return Request.CreateResponse(HttpStatusCode.OK, (ExpandoObject) e);
+                e.Children = children.Select(c => ConstructExpandoObject(c,false,Select)).ToArray();
+                return Ok((ExpandoObject) e);
             }
-            else return Request.CreateResponse(HttpStatusCode.OK);
+            else return Ok();
         }
         
         [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpPost,HttpGet, Route("{Reference}/query/{contenttype?}")]
-        public virtual HttpResponseMessage QueryDescendents(string Reference, [FromBody] ExpandoObject Query,string contenttype=null, string Select = null, int Skip = 0, int Take = 100)
+        public virtual IHttpActionResult QueryDescendents(string Reference, [FromBody] ExpandoObject Query, string contenttype = null, string Select = null, int Skip = 0, int Take = 100)
         {
             var r = LookupRef(Reference);
-            if (r == ContentReference.EmptyReference) return Request.CreateResponse(HttpStatusCode.NotFound);
+            if (r == ContentReference.EmptyReference) return NotFound();
             var descendents = _repo.GetDescendents(r);
             List<IContent> ToReturn = new List<IContent>(Take+Skip);
             int Skipped = 0;
@@ -179,14 +199,14 @@ namespace ServiceAPIExtensions.Controllers
                 ToReturn.Add(c);
                 if (ToReturn.Count == Take) break;
             }
-            return Request.CreateResponse(HttpStatusCode.OK, ToReturn.Select(c =>ConstructExpandoObject(c, Select)).ToArray());
+            return Ok(ToReturn.Select(c =>ConstructExpandoObject(c, Select)).ToArray());
         }
 
         [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPut, Route("{Reference}")]
-        public virtual HttpResponseMessage PutContent(string Reference, [FromBody] ExpandoObject Updated, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
+        public virtual IHttpActionResult PutContent(string Reference, [FromBody] ExpandoObject Updated, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
         {
             var r = LookupRef(Reference);
-            if (r == ContentReference.EmptyReference) return Request.CreateResponse(HttpStatusCode.NotFound);
+            if (r == ContentReference.EmptyReference) return NotFound();
             var content = (_repo.Get<IContent>(r) as IReadOnly).CreateWritableClone() as IContent;
             var dic=Updated as IDictionary<string, object>;
             UpdateContentWithProperties(dic, content);
@@ -197,20 +217,20 @@ namespace ServiceAPIExtensions.Controllers
             }
             var rt = _repo.Save(content, saveaction);
 
-            return Request.CreateResponse(HttpStatusCode.OK, new { reference=rt.ToString()});
+            return Ok( new { reference=rt.ToString()});
         }
 
         [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpDelete, Route("{Reference}")]
-        public virtual HttpResponseMessage DeleteContent(string Reference)
+        public virtual IHttpActionResult DeleteContent(string Reference)
         {
             var r = LookupRef(Reference);
-            if (r == ContentReference.EmptyReference) return Request.CreateResponse(HttpStatusCode.NotFound);
+            if (r == ContentReference.EmptyReference) return NotFound();
             if (_repo.GetAncestors(r).Any(ic => ic.ContentLink == ContentReference.WasteBasket))
             {
                 //Already in waste basket, delete
                 _repo.Delete(r, false);
             } else _repo.MoveToWastebasket(r);
-            return Request.CreateResponse(HttpStatusCode.OK);
+            return Ok();
         }
 
 
@@ -223,13 +243,19 @@ namespace ServiceAPIExtensions.Controllers
         /// <param name="properties"></param>
         /// <returns></returns>
         [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPost, Route("{ParentRef}/Create/{ContentType}/{SaveAction?}")]
-        public virtual HttpResponseMessage CreateContent(string ParentRef, string ContentType, [FromBody] ExpandoObject content, EPiServer.DataAccess.SaveAction action=EPiServer.DataAccess.SaveAction.Save)
+        public virtual IHttpActionResult CreateContent(string ParentRef, string ContentType, [FromBody] ExpandoObject content, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
         {
             //Instantiate content of named type
             var p = LookupRef(ParentRef);
-            if (p == ContentReference.EmptyReference) return Request.CreateResponse(HttpStatusCode.NotFound);
+            if (p == ContentReference.EmptyReference) return NotFound();
+            int j = 0;
+
             var ctype = _typerepo.Load(ContentType);
-            if (ctype == null) return Request.CreateResponse(HttpStatusCode.NotFound);
+            if (ctype==null && int.TryParse(ContentType, out j))
+            {
+                ctype = _typerepo.Load(j);
+            }
+            if (ctype == null) return NotFound();
 
 
             var properties = content as IDictionary<string, object>;
@@ -245,7 +271,7 @@ namespace ServiceAPIExtensions.Controllers
                 saveaction = EPiServer.DataAccess.SaveAction.Publish;
             }
             var rt=_repo.Save(con, saveaction);
-            return Request.CreateResponse(HttpStatusCode.OK, new {reference=rt.ToReferenceWithoutVersion().ToString()});
+            return Created<object>(new Uri(Url.Link("GetContentRoute",new {Reference=rt.ToReferenceWithoutVersion().ToString()})), new {reference=rt.ToReferenceWithoutVersion().ToString()});
         }
 
         private void UpdateContentWithProperties(IDictionary<string, object> properties, IContent con)
@@ -299,30 +325,34 @@ namespace ServiceAPIExtensions.Controllers
 
 
         [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPost, Route("EnsurePathExist/{ContentType}/{*Path}")]
-        public virtual HttpResponseMessage EnsurePathExist(string Path, string ContentType)
+        public virtual IHttpActionResult EnsurePathExist(string Path, string ContentType)
         {
             //Ensures that the path exists, otherwise create it using ContentType
             //If first element doesn't exist, assuming globalblock
             var parts = Path.Split('/');
             var r = LookupRef(parts.First());
-            if (r == null) r = ContentReference.GlobalBlockFolder;
-            HttpResponseMessage d = Request.CreateResponse(HttpStatusCode.OK, new { reference = r.ToString() });
+            if (r == ContentReference.EmptyReference) r = ContentReference.GlobalBlockFolder;
+            IHttpActionResult d = Ok( new { reference = r.ToString() });
             foreach (var k in parts.Skip(1))
             {
+                var oldRef = r;
                 //TODO: IF k does not exist at this path
                 r = LookupRef(r, ContentType, k);
-                dynamic dic = new ExpandoObject();
-                dic.Name = k;
-                d=CreateContent(r.ToString(), ContentType, dic, EPiServer.DataAccess.SaveAction.Publish);
+                if (r == ContentReference.EmptyReference)
+                {
+                    dynamic dic = new ExpandoObject();
+                    dic.Name = k;
+                    d = CreateContent(oldRef.ToString(), ContentType, dic, EPiServer.DataAccess.SaveAction.Publish);
+                }
             }
             return d;
         }
 
         [AuthorizePermission("EPiServerServiceApi", "WriteAccess"),HttpPost, Route("{Ref}/Upload/{name}")]
-        public virtual HttpResponseMessage UploadBlob(string Ref, string name, [FromBody] byte[] data)
+        public virtual IHttpActionResult UploadBlob(string Ref, string name, [FromBody] byte[] data)
         {
             var r = LookupRef(Ref);
-            if (r == null) return Request.CreateResponse(HttpStatusCode.NotFound);
+            if (r == null) return NotFound();
             var icnt=_repo.Get<IContent>(r);
             //TODO: Support Chunks - if blob already exist, extend on it.
 
@@ -331,9 +361,9 @@ namespace ServiceAPIExtensions.Controllers
                 var md = (MediaData) (icnt as MediaData).CreateWritableClone();
                 WriteBlobToStorage(name, data, md);
                 _repo.Save(md, EPiServer.DataAccess.SaveAction.Publish); //Should we always publish?
-                return Request.CreateResponse(HttpStatusCode.OK);
+                return Ok();
             }
-            return Request.CreateResponse(HttpStatusCode.UnsupportedMediaType);
+            return StatusCode(HttpStatusCode.UnsupportedMediaType);
         }
 
 
@@ -351,13 +381,13 @@ namespace ServiceAPIExtensions.Controllers
 
         
         [AuthorizePermission("EPiServerServiceApi", "WriteAccess"),HttpGet, Route("{Ref}/Move/{ParentRef}")]
-        public virtual HttpResponseMessage MoveContent(string Ref, string ParentRef)
+        public virtual IHttpActionResult MoveContent(string Ref, string ParentRef)
         {
             var a = LookupRef(Ref);
             var b = LookupRef(ParentRef);
-            if (a == null || b == null) return Request.CreateResponse(HttpStatusCode.NotFound);
+            if (a == null || b == null) return NotFound();
             _repo.Move(a, b);
-            return Request.CreateResponse(HttpStatusCode.OK);
+            return Ok();
         }
         
 
@@ -378,7 +408,7 @@ namespace ServiceAPIExtensions.Controllers
         //Add Blob
 
         [HttpGet]
-        [Route("version")]
+        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"),Route("version")]
         public virtual ApiVersion Version()
         {
             return new ApiVersion() { Component = "ContentAPI", Version = "1.0" };

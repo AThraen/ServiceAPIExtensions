@@ -24,7 +24,7 @@ namespace ServiceAPIExtensions.Controllers
     {
 
          [AuthorizePermission("EPiServerServiceApi", "ReadAccess"),HttpGet, Route("list")]
-         public virtual HttpResponseMessage ListAllUsers()
+         public virtual IHttpActionResult ListAllUsers()
          {
              var users=Membership.GetAllUsers().Cast<MembershipUser>().ToArray();
              //TODO: Support pagination
@@ -35,7 +35,7 @@ namespace ServiceAPIExtensions.Controllers
                  lst.Add(d);
              }
 
-             return Request.CreateResponse(HttpStatusCode.OK, lst.ToArray());
+             return Ok(lst.ToArray());
          }
 
 
@@ -65,7 +65,7 @@ namespace ServiceAPIExtensions.Controllers
          }
 
          [AuthorizePermission("EPiServerServiceApi", "WriteAccess"),HttpPut, Route("{UserName}")]
-         public virtual HttpResponseMessage CreateUpdateUser(string UserName, [FromBody] dynamic Payload)
+         public virtual IHttpActionResult CreateUpdateUser(string UserName, [FromBody] dynamic Payload)
          {
              var u = FindUser(UserName);
              if (u == null)
@@ -77,69 +77,69 @@ namespace ServiceAPIExtensions.Controllers
              u.LastLoginDate = (DateTime)Payload.LastLoginDate;
              Membership.UpdateUser(u);
              
-             return Request.CreateResponse(HttpStatusCode.OK);
+             return Ok();
          }
 
          [AuthorizePermission("EPiServerServiceApi", "WriteAccess"),HttpPut, Route("roles/{rolename}")]
-         public virtual HttpResponseMessage CreateRole(string rolename)
+         public virtual IHttpActionResult CreateRole(string rolename)
          {
              if (!Roles.RoleExists(rolename))
              {
                  Roles.CreateRole(rolename);
              }
-             return Request.CreateResponse(HttpStatusCode.OK);
+             return Ok();
          }
 
          [AuthorizePermission("EPiServerServiceApi", "WriteAccess"),HttpDelete, Route("roles/{rolename}")]
-         public virtual HttpResponseMessage DeleteRole(string rolename)
+         public virtual IHttpActionResult DeleteRole(string rolename)
          {
              if (Roles.RoleExists(rolename))
              {
                  Roles.DeleteRole(rolename);
              }
-             else return Request.CreateResponse(HttpStatusCode.NotFound);
-             return Request.CreateResponse(HttpStatusCode.OK);
+             else return NotFound();
+             return Ok();
          }
 
          [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPost, Route("roles/{rolename}")]
-         public virtual HttpResponseMessage AddUsersToRole(string rolename, [FromBody] dynamic Payload)
+         public virtual IHttpActionResult AddUsersToRole(string rolename, [FromBody] dynamic Payload)
          {
              Roles.AddUsersToRole((string[])Payload.users, rolename);
-             return Request.CreateResponse(HttpStatusCode.OK);
+             return Ok();
          }
 
          [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpGet, Route("{UserName}")]
-         public virtual HttpResponseMessage GetUser(string UserName)
+         public virtual IHttpActionResult GetUser(string UserName)
          {
              var u = FindUser(UserName);
              return Request.CreateResponse(HttpStatusCode.OK, (ExpandoObject)BuildUserObject(u));
          }
 
          [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpGet, Route("{UserName}/roles")]
-         public virtual HttpResponseMessage GetRolesForUser(string UserName)
+         public virtual IHttpActionResult GetRolesForUser(string UserName)
          {
 
              var u = FindUser(UserName);
              var lst=Roles.GetRolesForUser(u.UserName);
-             return Request.CreateResponse(HttpStatusCode.OK, lst);
+             return Ok();
          }
 
          [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPut, Route("{UserName}/roles")]
-         public virtual HttpResponseMessage PutUserInRole(string UserName, [FromBody]dynamic Payload)
+         public virtual IHttpActionResult PutUserInRole(string UserName, [FromBody]dynamic Payload)
          {
              var u = FindUser(UserName);
              Roles.AddUserToRole(u.UserName, (string)Payload.Role);
              var lst = Roles.GetRolesForUser(u.UserName);
-             return Request.CreateResponse(HttpStatusCode.OK, lst);
+             return Ok();
          }
 
          [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpDelete, Route("{UserName}/roles")]
-         public virtual HttpResponseMessage RemoveUserFromRole(string UserName,[FromBody] dynamic Payload)
+         public virtual IHttpActionResult RemoveUserFromRole(string UserName, [FromBody] dynamic Payload)
          {
              var u = FindUser(UserName);
              Roles.RemoveUserFromRole(u.UserName, (string) Payload.Role);
              var lst = Roles.GetRolesForUser(u.UserName);
-             return Request.CreateResponse(HttpStatusCode.OK, lst);
+             return Ok( lst);
          }
 
 
