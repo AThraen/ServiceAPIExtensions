@@ -28,7 +28,7 @@ namespace ServiceAPIExtensions.Controllers
     {
         protected IContentRepository _repo = ServiceLocator.Current.GetInstance<IContentRepository>();
         protected IContentTypeRepository _typerepo = ServiceLocator.Current.GetInstance<IContentTypeRepository>();
-        protected RawContentRetriever _rc= ServiceLocator.Current.GetInstance<RawContentRetriever>();
+        protected IRawContentRetriever _rc = ServiceLocator.Current.GetInstance<IRawContentRetriever>();
         protected BlobFactory _blobfactory = ServiceLocator.Current.GetInstance<BlobFactory>();
 
 
@@ -152,8 +152,25 @@ namespace ServiceAPIExtensions.Controllers
             var r = LookupRef(Reference);
             if (r == ContentReference.EmptyReference) return NotFound();
             var cnt = _repo.Get<IContent>(r);
-            if (!cnt.Property.Contains(Property)) NotFound();
+            if (!cnt.Property.Contains(Property)) return NotFound();
             return Ok(new {Property=cnt.Property[Property].ToWebString()});
+        }
+
+        [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/HttpGet, Route("{Reference}/BinaryData")]
+        public virtual IHttpActionResult GetBinaryContent(string Reference)
+        {
+            var r = LookupRef(Reference);
+            if (r == ContentReference.EmptyReference) return NotFound();
+            var cnt = _repo.Get<IContent>(r);
+            var md = cnt as MediaData;
+            if (md.BinaryData == null) return NotFound();
+            using (var br = new BinaryReader(md.BinaryData.OpenRead()))
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.OK);
+                response.Content = new ByteArrayContent(br.ReadBytes((int)br.BaseStream.Length));
+                response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+                return ResponseMessage(response);
+            }           
         }
 
 
@@ -402,8 +419,6 @@ namespace ServiceAPIExtensions.Controllers
         {
             return true;
         }
-
-
 
         //Add Blob
 
