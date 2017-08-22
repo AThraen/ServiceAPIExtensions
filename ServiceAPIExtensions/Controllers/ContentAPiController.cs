@@ -379,8 +379,8 @@ namespace ServiceAPIExtensions.Controllers
             var parts = Path.Split('/');
             var r = LookupRef(parts.First());
             if (r == ContentReference.EmptyReference) r = ContentReference.GlobalBlockFolder;
-            
-            bool lookingForContentArea = false;
+
+            string previousPart = "";
 
             foreach (var k in parts.Skip(1))
             {
@@ -423,7 +423,7 @@ namespace ServiceAPIExtensions.Controllers
                     }
                 }
 
-                if (lookingForContentArea)
+                if (previousPart.Equals("main"))
                 {
                     var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
 
@@ -431,16 +431,27 @@ namespace ServiceAPIExtensions.Controllers
 
                     var olRef = r;
                     r = contentArea.ContentLink;
-                    lookingForContentArea = false;
-                }else if(k.Equals("content")) {
-                    lookingForContentArea = true;
+                } else if (previousPart.Equals("related")) {
+                    var item = _repo.Get<IContent>(r).Property.Get("RelatedContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+
+
+                } else if (k.Equals("main") || k.Equals("related")) {
+                    //This part only shows that the next part should be in the MainContentArea or RelatedContentArea, So skip this part.
+                    previousPart = k;
                     continue;
                 }
                 else
                 {
                     var oldRef = r;
                     r = LookupRef(r, k);
-                }                          
+                }
+
+                previousPart = k;
             }
 
             var content = _repo.Get<IContent>(r);
