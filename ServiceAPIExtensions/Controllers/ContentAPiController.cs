@@ -38,6 +38,7 @@ namespace ServiceAPIExtensions.Controllers
             if (Ref.ToLower() == "start") return ContentReference.StartPage;
             if (Ref.ToLower() == "globalblock") return ContentReference.GlobalBlockFolder;
             if (Ref.ToLower() == "siteblock") return ContentReference.SiteBlockFolder;
+
             ContentReference c=ContentReference.EmptyReference;
             if (ContentReference.TryParse(Ref, out c)) return c;
             Guid g=Guid.Empty;
@@ -48,6 +49,13 @@ namespace ServiceAPIExtensions.Controllers
         protected ContentReference LookupRef(ContentReference Parent, string ContentType, string Name)
         {
             var content=_repo.GetChildren<IContent>(Parent).Where(ch => ch.GetType().Name == ContentType && ch.Name == Name).FirstOrDefault();
+            if (content == null) return ContentReference.EmptyReference;
+            return content.ContentLink;
+        }
+
+        protected ContentReference LookupRef(ContentReference Parent, string Name)
+        {
+            var content = _repo.GetChildren<IContent>(Parent).Where(ch => ch.Name == Name).FirstOrDefault();
             if (content == null) return ContentReference.EmptyReference;
             return content.ContentLink;
         }
@@ -363,6 +371,81 @@ namespace ServiceAPIExtensions.Controllers
                 }
             }
             return d;
+        }
+
+        [/*AuthorizePermission("EPiServerServiceApi", "WriteAccess"),*/ HttpGet, Route("path/{*Path}")]
+        public virtual IHttpActionResult ProcessPath(string Path)
+        {
+            var parts = Path.Split('/');
+            var r = LookupRef(parts.First());
+            if (r == ContentReference.EmptyReference) r = ContentReference.GlobalBlockFolder;
+            
+            bool lookingForContentArea = false;
+
+            foreach (var k in parts.Skip(1))
+            {
+                //endpoint for binary data
+                if (k.Equals("BinaryData")){
+                    var cnt = _repo.Get<IContent>(r);
+
+                    IContent imageContent;
+                    if (cnt.Property.Get("Image") != null)
+                    {
+                        imageContent = _repo.Get<IContent>(LookupRef(cnt.Property.Get("Image").ToString()));
+                    }else if(cnt.Property.Get("Media") != null)
+                    {
+                        imageContent = cnt;
+                    }
+                    else
+                    {
+                        imageContent = cnt;
+                    }
+                    var md = imageContent as MediaData;
+                    if (md.BinaryData == null) return NotFound();
+                    using (var br = new BinaryReader(md.BinaryData.OpenRead()))
+                    {
+                        var response = new HttpResponseMessage(HttpStatusCode.OK);
+                        response.Content = new ByteArrayContent(br.ReadBytes((int)br.BaseStream.Length));
+                        response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(md.MimeType);
+                        return ResponseMessage(response);
+                    }
+                }
+
+                //endpoint for children
+                if (k.Equals("children"))
+                {
+                    var children = _repo.GetChildren<IContent>(r).ToList();
+                    if (children.Count > 0)
+                    {
+                        dynamic e = new ExpandoObject();
+                        e.Children = children.Select(c => ConstructExpandoObject(c, false)).ToArray();
+                        return Ok((ExpandoObject)e);
+                    }
+                }
+
+                if (lookingForContentArea)
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                    lookingForContentArea = false;
+                }else if(k.Equals("content")) {
+                    lookingForContentArea = true;
+                    continue;
+                }
+                else
+                {
+                    var oldRef = r;
+                    r = LookupRef(r, k);
+                }                          
+            }
+
+            var content = _repo.Get<IContent>(r);
+
+            return Ok(ConstructExpandoObject(content));
         }
 
         [AuthorizePermission("EPiServerServiceApi", "WriteAccess"),HttpPost, Route("{Ref}/Upload/{name}")]
