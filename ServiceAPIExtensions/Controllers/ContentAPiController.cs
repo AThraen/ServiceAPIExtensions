@@ -245,7 +245,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok( new { reference=rt.ToString()});
         }
 
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpDelete, Route("{Reference}")]
+        [/*AuthorizePermission("EPiServerServiceApi", "WriteAccess"),*/ HttpDelete, Route("{Reference}")]
         public virtual IHttpActionResult DeleteContent(string Reference)
         {
             var r = LookupRef(Reference);
@@ -258,6 +258,58 @@ namespace ServiceAPIExtensions.Controllers
             return Ok();
         }
 
+        [/*AuthorizePermission("EPiServerServiceApi", "WriteAccess"),*/ HttpDelete, Route("path/{*Path}")]
+        public virtual IHttpActionResult DeleteContentByPath(string Path)
+        {
+            var parts = Path.Split('/');
+            var r = LookupRef(parts.First());
+            string previousPart = "";
+
+            foreach (var k in parts.Skip(1))
+            {
+                if (previousPart.Equals("main"))
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                }
+                else if (previousPart.Equals("related"))
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("RelatedContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                }
+                else if (k.Equals("main") || k.Equals("related"))
+                {
+                    //This part only shows that the next part should be in the MainContentArea or RelatedContentArea, So skip this part.
+                    previousPart = k;
+                    continue;
+                }
+                else
+                {
+                    var oldRef = r;
+                    r = LookupRef(r, k);
+                }
+
+                previousPart = k;
+            }
+
+            if (_repo.GetAncestors(r).Any(ic => ic.ContentLink == ContentReference.WasteBasket))
+            {
+                //Already in waste basket, delete
+                _repo.Delete(r, false);
+            }
+            else _repo.MoveToWastebasket(r);
+
+            return Ok();
+
+        }
 
 
         /// <summary>
@@ -378,7 +430,9 @@ namespace ServiceAPIExtensions.Controllers
         {
             var parts = Path.Split('/');
             var r = LookupRef(parts.First());
-            if (r == ContentReference.EmptyReference) r = ContentReference.GlobalBlockFolder;
+
+            //Should we really do this?
+            //if (r == ContentReference.EmptyReference) r = ContentReference.GlobalBlockFolder;
 
             string previousPart = "";
 
