@@ -227,10 +227,47 @@ namespace ServiceAPIExtensions.Controllers
             return Ok(ToReturn.Select(c =>ConstructExpandoObject(c, Select)).ToArray());
         }
 
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPut, Route("{Reference}")]
+        [/*AuthorizePermission("EPiServerServiceApi", "WriteAccess"),*/ HttpPut, Route("path/{*Reference}")]
         public virtual IHttpActionResult PutContent(string Reference, [FromBody] ExpandoObject Updated, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
         {
-            var r = LookupRef(Reference);
+            var parts = Reference.Split('/');
+            var r = LookupRef(parts.First());
+            string previousPart = "";
+
+            foreach (var k in parts.Skip(1))
+            {
+                if (previousPart.Equals("main"))
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                }
+                else if (previousPart.Equals("related"))
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("RelatedContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                }
+                else if (k.Equals("main") || k.Equals("related"))
+                {
+                    previousPart = k;
+                    continue;
+                }
+                else
+                {
+                    var oldRef = r;
+                    r = LookupRef(r, k);
+                }
+
+                previousPart = k;
+            }
+
             if (r == ContentReference.EmptyReference) return NotFound();
             var content = (_repo.Get<IContent>(r) as IReadOnly).CreateWritableClone() as IContent;
             var dic=Updated as IDictionary<string, object>;
@@ -319,11 +356,55 @@ namespace ServiceAPIExtensions.Controllers
         /// <param name="ContentType"></param>
         /// <param name="properties"></param>
         /// <returns></returns>
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPost, Route("{ParentRef}/Create/{ContentType}/{SaveAction?}")]
-        public virtual IHttpActionResult CreateContent(string ParentRef, string ContentType, [FromBody] ExpandoObject content, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
+        [/*AuthorizePermission("EPiServerServiceApi", "WriteUs"),*/ HttpPost, Route("{*ParentRef}")]
+        public virtual IHttpActionResult CreateContent(string ParentRef, [FromBody] ExpandoObject content, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
         {
+            var parts = ParentRef.Split('/');
+            var r = LookupRef(parts.First());
+
+            string previousPart = "";
+            string ContentType = "";
+
+            foreach (var k in parts.Skip(1))
+            {           
+                if (previousPart.Equals("main"))
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                }
+                else if (previousPart.Equals("related"))
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("RelatedContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                }else if (previousPart.Equals("Create"))
+                {
+                    ContentType = k;
+                }
+                else if (k.Equals("main") || k.Equals("related") || k.Equals("Create"))
+                {
+                    //This part only shows that the next part should be in the MainContentArea or RelatedContentArea, So skip this part.
+                    previousPart = k;
+                    continue;
+                }
+                else
+                {
+                    var oldRef = r;
+                    r = LookupRef(r, k);
+                }
+
+                previousPart = k;
+            }
+
             //Instantiate content of named type
-            var p = LookupRef(ParentRef);
+            var p = r;
             if (p == ContentReference.EmptyReference) return NotFound();
             int j = 0;
 
@@ -419,7 +500,7 @@ namespace ServiceAPIExtensions.Controllers
                 {
                     dynamic dic = new ExpandoObject();
                     dic.Name = k;
-                    d = CreateContent(oldRef.ToString(), ContentType, dic, EPiServer.DataAccess.SaveAction.Publish);
+                    //d = CreateContent(oldRef.ToString(), ContentType, dic, EPiServer.DataAccess.SaveAction.Publish);
                 }
             }
             return d;
