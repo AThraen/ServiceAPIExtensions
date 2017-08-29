@@ -46,16 +46,16 @@ namespace ServiceAPIExtensions.Controllers
             return ContentReference.EmptyReference;
         }
 
-        protected ContentReference LookupRef(ContentReference Parent, string ContentType, string Name)
+        protected ContentReference LookupRef(ContentReference Parent, string Name)
         {
-            var content=_repo.GetChildren<IContent>(Parent).Where(ch => ch.GetType().Name == ContentType && ch.Name == Name).FirstOrDefault();
+            var content = _repo.GetChildren<IContent>(Parent).Where(ch => ch.Name == Name).FirstOrDefault();
             if (content == null) return ContentReference.EmptyReference;
             return content.ContentLink;
         }
 
-        protected ContentReference LookupRef(ContentReference Parent, string Name)
+        protected ContentReference LookupRef(ContentReference Parent, string ContentType, string Name)
         {
-            var content = _repo.GetChildren<IContent>(Parent).Where(ch => ch.Name == Name).FirstOrDefault();
+            var content=_repo.GetChildren<IContent>(Parent).Where(ch => ch.GetType().Name == ContentType && ch.Name == Name).FirstOrDefault();
             if (content == null) return ContentReference.EmptyReference;
             return content.ContentLink;
         }
@@ -356,7 +356,7 @@ namespace ServiceAPIExtensions.Controllers
         /// <param name="ContentType"></param>
         /// <param name="properties"></param>
         /// <returns></returns>
-        [/*AuthorizePermission("EPiServerServiceApi", "WriteUs"),*/ HttpPost, Route("{*ParentRef}")]
+        [/*AuthorizePermission("EPiServerServiceApi", "WriteAcces"),*/ HttpPost, Route("path/{*ParentRef}")]
         public virtual IHttpActionResult CreateContent(string ParentRef, [FromBody] ExpandoObject content, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
         {
             var parts = ParentRef.Split('/');
@@ -424,7 +424,7 @@ namespace ServiceAPIExtensions.Controllers
 
             if (properties.ContainsKey("Name")) con.Name = properties["Name"].ToString();
             EPiServer.DataAccess.SaveAction saveaction = action;
-            if (properties.ContainsKey("SaveAction") && properties["SaveAction"]=="Publish")
+            if (properties.ContainsKey("SaveAction") && (string)properties["SaveAction"]=="Publish")
             {
                 saveaction = EPiServer.DataAccess.SaveAction.Publish;
             }
@@ -527,13 +527,16 @@ namespace ServiceAPIExtensions.Controllers
                     if (cnt.Property.Get("Image") != null)
                     {
                         imageContent = _repo.Get<IContent>(LookupRef(cnt.Property.Get("Image").ToString()));
+                    }else if(cnt.Property.Get("PageImage") != null)
+                    {
+                        imageContent = _repo.Get<IContent>(LookupRef(cnt.Property.Get("PageImage").ToString()));
                     }else if(cnt.Property.Get("Media") != null)
                     {
                         imageContent = cnt;
                     }
                     else
                     {
-                        imageContent = cnt;
+                        return NotFound();
                     }
                     var md = imageContent as MediaData;
                     if (md.BinaryData == null) return NotFound();
