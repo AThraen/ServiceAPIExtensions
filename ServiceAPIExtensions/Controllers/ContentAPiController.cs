@@ -200,11 +200,25 @@ namespace ServiceAPIExtensions.Controllers
             }
             else return Ok();
         }
-        
-        [HttpPut, Route("path/{*Reference}")]
-        public virtual IHttpActionResult PutContentByPath(string Reference, [FromBody] ExpandoObject Updated, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
+
+        [HttpDelete, Route("{Reference}")]
+        public virtual IHttpActionResult DeleteContent(string Reference)
         {
-            var parts = Reference.Split('/');
+            var r = LookupRef(Reference);
+            if (r == ContentReference.EmptyReference) return NotFound();
+            if (_repo.GetAncestors(r).Any(ic => ic.ContentLink == ContentReference.WasteBasket))
+            {
+                //Already in waste basket, delete
+                _repo.Delete(r, false);
+            }
+            else _repo.MoveToWastebasket(r);
+            return Ok();
+        }
+
+        [HttpPut, Route("path/{*Path}")]
+        public virtual IHttpActionResult UpdateContentByPath(string Path, [FromBody] ExpandoObject Updated, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
+        {
+            var parts = Path.Split(new char[1] { '/' }, StringSplitOptions.RemoveEmptyEntries);
             var r = LookupRef(parts.First());
             string previousPart = "";
 
@@ -255,24 +269,11 @@ namespace ServiceAPIExtensions.Controllers
 
             return Ok( new { reference=rt.ToString()});
         }
-
-        [HttpDelete, Route("{Reference}")]
-        public virtual IHttpActionResult DeleteContent(string Reference)
-        {
-            var r = LookupRef(Reference);
-            if (r == ContentReference.EmptyReference) return NotFound();
-            if (_repo.GetAncestors(r).Any(ic => ic.ContentLink == ContentReference.WasteBasket))
-            {
-                //Already in waste basket, delete
-                _repo.Delete(r, false);
-            } else _repo.MoveToWastebasket(r);
-            return Ok();
-        }
-
+  
         [HttpDelete, Route("path/{*Path}")]
         public virtual IHttpActionResult DeleteContentByPath(string Path)
         {
-            var parts = Path.Split('/');
+            var parts = Path.Split(new char[1] { '/' },StringSplitOptions.RemoveEmptyEntries);
             var r = LookupRef(parts.First());
             string previousPart = "";
 
@@ -322,10 +323,10 @@ namespace ServiceAPIExtensions.Controllers
 
         }
 
-        [HttpPost, Route("path/{*ParentRef}")]
-        public virtual IHttpActionResult CreateContentByPath(string ParentRef, [FromBody] ExpandoObject content, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
+        [HttpPost, Route("path/{*Path}")]
+        public virtual IHttpActionResult CreateContentByPath(string Path, [FromBody] ExpandoObject content, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
         {
-            var parts = ParentRef.Split('/');
+            var parts = Path.Split(new char[1] { '/' }, StringSplitOptions.RemoveEmptyEntries);
             var r = LookupRef(parts.First());
 
             string previousPart = "";
@@ -399,9 +400,9 @@ namespace ServiceAPIExtensions.Controllers
         }
 
         [HttpGet, Route("path/{*Path}")]
-        public virtual IHttpActionResult getContentByPath(string Path)
+        public virtual IHttpActionResult GetContentByPath(string Path)
         {
-            var parts = Path.Split('/');
+            var parts = Path.Split(new char[1] { '/' },StringSplitOptions.RemoveEmptyEntries);
             var r = LookupRef(parts.First());
 
             //Should we really do this?
