@@ -60,10 +60,6 @@ namespace ServiceAPIExtensions.Controllers
             return content.ContentLink;
         }
 
-
-        //TODO: Query
-        //Region: New approach - dynamic and Expando Objects
-
         public static ExpandoObject ConstructExpandoObject(IContent c, string Select=null)
         {
             return ConstructExpandoObject(c,true, Select);
@@ -139,7 +135,7 @@ namespace ServiceAPIExtensions.Controllers
             return e;
         }
 
-        [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/HttpGet, Route("{Reference}/{language?}",Name="GetContentRoute")]
+        [HttpGet, Route("{Reference}/{language?}",Name="GetContentRoute")]
         public virtual IHttpActionResult GetContent(string Reference, string language=null, string Select=null)
         {
             var r=LookupRef(Reference);
@@ -154,7 +150,7 @@ namespace ServiceAPIExtensions.Controllers
         //TODO Languages, versions
 
         //TODO: Get Property, Put Property, Schedule Publish
-        [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/HttpGet, Route("{Reference}/{Property}")]
+        [HttpGet, Route("{Reference}/{Property}")]
         public virtual IHttpActionResult GetProperty(string Reference, string Property)
         {
             var r = LookupRef(Reference);
@@ -164,7 +160,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok(new {Property=cnt.Property[Property].ToWebString()});
         }
 
-        [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/HttpGet, Route("{Reference}/BinaryData")]
+        [HttpGet, Route("{Reference}/BinaryData")]
         public virtual IHttpActionResult GetBinaryContent(string Reference)
         {
             var r = LookupRef(Reference);
@@ -181,8 +177,7 @@ namespace ServiceAPIExtensions.Controllers
             }           
         }
 
-
-        [/*AuthorizePermission("EPiServerServiceApi", "WriteAccess"),*/HttpPost, Route("{Reference}/Publish")]
+        [HttpPost, Route("{Reference}/Publish")]
         public virtual IHttpActionResult PublishContent(string Reference)
         {
             var r = LookupRef(Reference);
@@ -191,7 +186,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok();
         }
 
-        [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/HttpGet, Route("{Reference}/children")]
+        [HttpGet, Route("{Reference}/children")]
         public virtual IHttpActionResult ListChildren(string Reference, string Select = null, int Skip = 0, int Take = 100)
         {
             var r = LookupRef(Reference);
@@ -206,29 +201,8 @@ namespace ServiceAPIExtensions.Controllers
             else return Ok();
         }
         
-        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpPost,HttpGet, Route("{Reference}/query/{contenttype?}")]
-        public virtual IHttpActionResult QueryDescendents(string Reference, [FromBody] ExpandoObject Query, string contenttype = null, string Select = null, int Skip = 0, int Take = 100)
-        {
-            var r = LookupRef(Reference);
-            if (r == ContentReference.EmptyReference) return NotFound();
-            var descendents = _repo.GetDescendents(r);
-            List<IContent> ToReturn = new List<IContent>(Take+Skip);
-            int Skipped = 0;
-            foreach (var d in descendents)
-            {
-                var c = _repo.Get<IContent>(d);
-                //if((contenttype!=null) && (c.ContentTypeID))
-                //TODO: Apply Queries
-
-                if (Skip > Skipped) { Skipped++; continue; }
-                ToReturn.Add(c);
-                if (ToReturn.Count == Take) break;
-            }
-            return Ok(ToReturn.Select(c =>ConstructExpandoObject(c, Select)).ToArray());
-        }
-
-        [/*AuthorizePermission("EPiServerServiceApi", "WriteAccess"),*/ HttpPut, Route("path/{*Reference}")]
-        public virtual IHttpActionResult PutContent(string Reference, [FromBody] ExpandoObject Updated, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
+        [HttpPut, Route("path/{*Reference}")]
+        public virtual IHttpActionResult PutContentByPath(string Reference, [FromBody] ExpandoObject Updated, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
         {
             var parts = Reference.Split('/');
             var r = LookupRef(parts.First());
@@ -282,7 +256,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok( new { reference=rt.ToString()});
         }
 
-        [/*AuthorizePermission("EPiServerServiceApi", "WriteAccess"),*/ HttpDelete, Route("{Reference}")]
+        [HttpDelete, Route("{Reference}")]
         public virtual IHttpActionResult DeleteContent(string Reference)
         {
             var r = LookupRef(Reference);
@@ -295,7 +269,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok();
         }
 
-        [/*AuthorizePermission("EPiServerServiceApi", "WriteAccess"),*/ HttpDelete, Route("path/{*Path}")]
+        [HttpDelete, Route("path/{*Path}")]
         public virtual IHttpActionResult DeleteContentByPath(string Path)
         {
             var parts = Path.Split('/');
@@ -348,16 +322,8 @@ namespace ServiceAPIExtensions.Controllers
 
         }
 
-
-        /// <summary>
-        /// Remember to add parameter if it should be published...
-        /// </summary>
-        /// <param name="ParentRef"></param>
-        /// <param name="ContentType"></param>
-        /// <param name="properties"></param>
-        /// <returns></returns>
-        [/*AuthorizePermission("EPiServerServiceApi", "WriteAcces"),*/ HttpPost, Route("path/{*ParentRef}")]
-        public virtual IHttpActionResult CreateContent(string ParentRef, [FromBody] ExpandoObject content, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
+        [HttpPost, Route("path/{*ParentRef}")]
+        public virtual IHttpActionResult CreateContentByPath(string ParentRef, [FromBody] ExpandoObject content, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
         {
             var parts = ParentRef.Split('/');
             var r = LookupRef(parts.First());
@@ -432,82 +398,8 @@ namespace ServiceAPIExtensions.Controllers
             return Created<object>(new Uri(Url.Link("GetContentRoute",new {Reference=rt.ToReferenceWithoutVersion().ToString()})), new {reference=rt.ToReferenceWithoutVersion().ToString()});
         }
 
-        private void UpdateContentWithProperties(IDictionary<string, object> properties, IContent con)
-        {
-            foreach (var k in properties.Keys)
-            {
-                UpdateFieldOnContent(properties, con, k);
-            }
-        }
-
-        private void UpdateFieldOnContent(IDictionary<string, object> properties, IContent con, string k)
-        {
-            //Problem: con might only contain very few properties (not inherited)
-            if (con.Property.Contains(k))
-            {
-
-                if (con.Property[k] is EPiServer.SpecializedProperties.PropertyContentArea)
-                {
-                    //Handle if property is Content Area.
-                    if (con.Property[k].Value == null) con.Property[k].Value = new ContentArea();
-                    ContentArea ca = con.Property[k].Value as ContentArea;
-                    var lst = properties[k];
-                    if (lst is List<object>)
-                    {
-                        foreach (var s in (lst as List<object>))
-                        {
-                            var itmref = LookupRef(s.ToString());
-                            ca.Items.Add(new ContentAreaItem() { ContentLink = itmref });
-                        }
-                    }
-                }
-                else if (properties[k] is string[])
-                {
-                    con.Property[k].Value = properties[k] as string[];
-                }
-                else
-                {
-                    con.Property[k].Value = properties[k];
-                }
-            }
-            else if (k.ToLower() == "binarydata" && con is MediaData)
-            {
-                dynamic binitm = properties[k];
-                string name = binitm.Name;
-                byte[] bytes = Convert.FromBase64String(binitm.Data);
-                WriteBlobToStorage(name, bytes, con as MediaData);
-            }
-        }
-
-
-
-
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPost, Route("EnsurePathExist/{ContentType}/{*Path}")]
-        public virtual IHttpActionResult EnsurePathExist(string Path, string ContentType)
-        {
-            //Ensures that the path exists, otherwise create it using ContentType
-            //If first element doesn't exist, assuming globalblock
-            var parts = Path.Split('/');
-            var r = LookupRef(parts.First());
-            if (r == ContentReference.EmptyReference) r = ContentReference.GlobalBlockFolder;
-            IHttpActionResult d = Ok( new { reference = r.ToString() });
-            foreach (var k in parts.Skip(1))
-            {
-                var oldRef = r;
-                //TODO: IF k does not exist at this path
-                r = LookupRef(r, ContentType, k);
-                if (r == ContentReference.EmptyReference)
-                {
-                    dynamic dic = new ExpandoObject();
-                    dic.Name = k;
-                    //d = CreateContent(oldRef.ToString(), ContentType, dic, EPiServer.DataAccess.SaveAction.Publish);
-                }
-            }
-            return d;
-        }
-
-        [/*AuthorizePermission("EPiServerServiceApi", "WriteAccess"),*/ HttpGet, Route("path/{*Path}")]
-        public virtual IHttpActionResult ProcessPath(string Path)
+        [HttpGet, Route("path/{*Path}")]
+        public virtual IHttpActionResult getContentByPath(string Path)
         {
             var parts = Path.Split('/');
             var r = LookupRef(parts.First());
@@ -524,13 +416,7 @@ namespace ServiceAPIExtensions.Controllers
                     var cnt = _repo.Get<IContent>(r);
 
                     IContent imageContent;
-                    if (cnt.Property.Get("Image") != null)
-                    {
-                        imageContent = _repo.Get<IContent>(LookupRef(cnt.Property.Get("Image").ToString()));
-                    }else if(cnt.Property.Get("PageImage") != null)
-                    {
-                        imageContent = _repo.Get<IContent>(LookupRef(cnt.Property.Get("PageImage").ToString()));
-                    }else if(cnt.Property.Get("Media") != null)
+                    if(cnt.Property.Get("Media") != null)
                     {
                         imageContent = cnt;
                     }
@@ -597,7 +483,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok(ConstructExpandoObject(content));
         }
 
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"),HttpPost, Route("{Ref}/Upload/{name}")]
+        [HttpPost, Route("{Ref}/Upload/{name}")]
         public virtual IHttpActionResult UploadBlob(string Ref, string name, [FromBody] byte[] data)
         {
             var r = LookupRef(Ref);
@@ -615,6 +501,15 @@ namespace ServiceAPIExtensions.Controllers
             return StatusCode(HttpStatusCode.UnsupportedMediaType);
         }
 
+        [HttpGet, Route("{Ref}/Move/{ParentRef}")]
+        public virtual IHttpActionResult MoveContent(string Ref, string ParentRef)
+        {
+            var a = LookupRef(Ref);
+            var b = LookupRef(ParentRef);
+            if (a == null || b == null) return NotFound();
+            _repo.Move(a, b);
+            return Ok();
+        }
 
         private void WriteBlobToStorage(string name, byte[] data, MediaData md)
         {
@@ -628,39 +523,52 @@ namespace ServiceAPIExtensions.Controllers
             md.BinaryData = blob;
         }
 
-        
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"),HttpGet, Route("{Ref}/Move/{ParentRef}")]
-        public virtual IHttpActionResult MoveContent(string Ref, string ParentRef)
+        private void UpdateContentWithProperties(IDictionary<string, object> properties, IContent con)
         {
-            var a = LookupRef(Ref);
-            var b = LookupRef(ParentRef);
-            if (a == null || b == null) return NotFound();
-            _repo.Move(a, b);
-            return Ok();
-        }
-        
-
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"),HttpGet,Route("validatewrite")]
-        public virtual bool ValidateWriteAccess()
-        {
-            return true;
+            foreach (var k in properties.Keys)
+            {
+                UpdateFieldOnContent(properties, con, k);
+            }
         }
 
-        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpGet, Route("validateread")]
-        public virtual bool ValidateReadAccess()
+        private void UpdateFieldOnContent(IDictionary<string, object> properties, IContent con, string k)
         {
-            return true;
+            //Problem: con might only contain very few properties (not inherited)
+            if (con.Property.Contains(k))
+            {
+
+                if (con.Property[k] is EPiServer.SpecializedProperties.PropertyContentArea)
+                {
+                    //Handle if property is Content Area.
+                    if (con.Property[k].Value == null) con.Property[k].Value = new ContentArea();
+                    ContentArea ca = con.Property[k].Value as ContentArea;
+                    var lst = properties[k];
+                    if (lst is List<object>)
+                    {
+                        foreach (var s in (lst as List<object>))
+                        {
+                            var itmref = LookupRef(s.ToString());
+                            ca.Items.Add(new ContentAreaItem() { ContentLink = itmref });
+                        }
+                    }
+                }
+                else if (properties[k] is string[])
+                {
+                    con.Property[k].Value = properties[k] as string[];
+                }
+                else
+                {
+                    con.Property[k].Value = properties[k];
+                }
+            }
+            else if (k.ToLower() == "binarydata" && con is MediaData)
+            {
+                dynamic binitm = properties[k];
+                string name = binitm.Name;
+                byte[] bytes = Convert.FromBase64String(binitm.Data);
+                WriteBlobToStorage(name, bytes, con as MediaData);
+            }
         }
 
-        //Add Blob
-
-        [HttpGet]
-        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"),Route("version")]
-        public virtual ApiVersion Version()
-        {
-            return new ApiVersion() { Component = "ContentAPI", Version = "1.0" };
-        } 
     }
-
-
 }
