@@ -160,7 +160,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok(new {Property=cnt.Property[Property].ToWebString()});
         }
 
-        [HttpGet, Route("{Reference}/BinaryData")]
+        [HttpGet, Route("{Reference}/binarydata")]
         public virtual IHttpActionResult GetBinaryContent(string Reference)
         {
             var r = LookupRef(Reference);
@@ -224,7 +224,7 @@ namespace ServiceAPIExtensions.Controllers
 
             foreach (var k in parts.Skip(1))
             {
-                if (previousPart.Equals("main"))
+                if (previousPart.ToLower().Equals("main"))
                 {
                     var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
 
@@ -233,7 +233,7 @@ namespace ServiceAPIExtensions.Controllers
                     var olRef = r;
                     r = contentArea.ContentLink;
                 }
-                else if (previousPart.Equals("related"))
+                else if (previousPart.ToLower().Equals("related"))
                 {
                     var item = _repo.Get<IContent>(r).Property.Get("RelatedContentArea").Value as ContentArea;
 
@@ -242,7 +242,7 @@ namespace ServiceAPIExtensions.Controllers
                     var olRef = r;
                     r = contentArea.ContentLink;
                 }
-                else if (k.Equals("main") || k.Equals("related"))
+                else if (k.ToLower().Equals("main") || k.ToLower().Equals("related"))
                 {
                     previousPart = k;
                     continue;
@@ -279,7 +279,7 @@ namespace ServiceAPIExtensions.Controllers
 
             foreach (var k in parts.Skip(1))
             {
-                if (previousPart.Equals("main"))
+                if (previousPart.ToLower().Equals("main"))
                 {
                     var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
 
@@ -288,7 +288,7 @@ namespace ServiceAPIExtensions.Controllers
                     var olRef = r;
                     r = contentArea.ContentLink;
                 }
-                else if (previousPart.Equals("related"))
+                else if (previousPart.ToLower().Equals("related"))
                 {
                     var item = _repo.Get<IContent>(r).Property.Get("RelatedContentArea").Value as ContentArea;
 
@@ -297,7 +297,7 @@ namespace ServiceAPIExtensions.Controllers
                     var olRef = r;
                     r = contentArea.ContentLink;
                 }
-                else if (k.Equals("main") || k.Equals("related"))
+                else if (k.ToLower().Equals("main") || k.ToLower().Equals("related"))
                 {
                     //This part only shows that the next part should be in the MainContentArea or RelatedContentArea, So skip this part.
                     previousPart = k;
@@ -311,6 +311,7 @@ namespace ServiceAPIExtensions.Controllers
 
                 previousPart = k;
             }
+            if (r == ContentReference.EmptyReference) return NotFound();
 
             if (_repo.GetAncestors(r).Any(ic => ic.ContentLink == ContentReference.WasteBasket))
             {
@@ -334,7 +335,7 @@ namespace ServiceAPIExtensions.Controllers
 
             foreach (var k in parts.Skip(1))
             {           
-                if (previousPart.Equals("main"))
+                if (previousPart.ToLower().Equals("main"))
                 {
                     var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
 
@@ -343,7 +344,7 @@ namespace ServiceAPIExtensions.Controllers
                     var olRef = r;
                     r = contentArea.ContentLink;
                 }
-                else if (previousPart.Equals("related"))
+                else if (previousPart.ToLower().Equals("related"))
                 {
                     var item = _repo.Get<IContent>(r).Property.Get("RelatedContentArea").Value as ContentArea;
 
@@ -351,11 +352,11 @@ namespace ServiceAPIExtensions.Controllers
 
                     var olRef = r;
                     r = contentArea.ContentLink;
-                }else if (previousPart.Equals("Create"))
+                }else if (previousPart.ToLower().Equals("Create"))
                 {
                     ContentType = k;
                 }
-                else if (k.Equals("main") || k.Equals("related") || k.Equals("Create"))
+                else if (k.ToLower().Equals("main") || k.ToLower().Equals("related") || k.ToLower().Equals("Create"))
                 {
                     //This part only shows that the next part should be in the MainContentArea or RelatedContentArea, So skip this part.
                     previousPart = k;
@@ -385,6 +386,8 @@ namespace ServiceAPIExtensions.Controllers
 
             var properties = content as IDictionary<string, object>;
 
+            if (p == ContentReference.EmptyReference) return NotFound();
+
             IContent con = _repo.GetDefault<IContent>(p, ctype.ID);
             UpdateContentWithProperties(properties, con);
             //TODO: Handle local blocks. Handle properties that are not strings (parse values).
@@ -413,7 +416,7 @@ namespace ServiceAPIExtensions.Controllers
             foreach (var k in parts.Skip(1))
             {
                 //endpoint for binary data
-                if (k.Equals("BinaryData")){
+                if (k.ToLower().Equals("binarydata")){
                     var cnt = _repo.Get<IContent>(r);
 
                     IContent imageContent;
@@ -437,7 +440,7 @@ namespace ServiceAPIExtensions.Controllers
                 }
 
                 //endpoint for children
-                if (k.Equals("children"))
+                if (k.ToLower().Equals("children"))
                 {
                     var children = _repo.GetChildren<IContent>(r).ToList();
                     if (children.Count > 0)
@@ -448,7 +451,7 @@ namespace ServiceAPIExtensions.Controllers
                     }
                 }
 
-                if (previousPart.Equals("main"))
+                if (previousPart.ToLower().Equals("main"))
                 {
                     var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
 
@@ -456,7 +459,7 @@ namespace ServiceAPIExtensions.Controllers
 
                     var olRef = r;
                     r = contentArea.ContentLink;
-                } else if (previousPart.Equals("related")) {
+                } else if (previousPart.ToLower().Equals("related")) {
                     var item = _repo.Get<IContent>(r).Property.Get("RelatedContentArea").Value as ContentArea;
 
                     ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
@@ -478,6 +481,8 @@ namespace ServiceAPIExtensions.Controllers
 
                 previousPart = k;
             }
+
+            if (r == ContentReference.EmptyReference) return NotFound();
 
             var content = _repo.Get<IContent>(r);
 
