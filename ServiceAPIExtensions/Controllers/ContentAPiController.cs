@@ -20,6 +20,7 @@ using EPiServer.Framework.Blobs;
 using System.IO;
 using EPiServer.Web.Routing;
 using EPiServer.Data.Entity;
+using EPiServer.Web.Internal;
 
 namespace ServiceAPIExtensions.Controllers
 {
@@ -48,16 +49,16 @@ namespace ServiceAPIExtensions.Controllers
 
         protected ContentReference LookupRef(ContentReference Parent, string Name)
         {
-            var content = _repo.GetChildren<IContent>(Parent).Where(ch => ch.Name == Name).FirstOrDefault();
+            var content = (new UrlSegment(_repo)).GetContentBySegment(Parent, Name);
             if (content == null) return ContentReference.EmptyReference;
-            return content.ContentLink;
+            return content;
         }
 
         protected ContentReference LookupRef(ContentReference Parent, string ContentType, string Name)
         {
-            var content=_repo.GetChildren<IContent>(Parent).Where(ch => ch.GetType().Name == ContentType && ch.Name == Name).FirstOrDefault();
-            if (content == null) return ContentReference.EmptyReference;
-            return content.ContentLink;
+            var content = (new UrlSegment(_repo)).GetContentBySegment(Parent, Name);
+            if (content == null || content.GetType().Name == ContentType) return ContentReference.EmptyReference;
+            return content;
         }
 
         public static ExpandoObject ConstructExpandoObject(IContent c, string Select=null)
@@ -331,7 +332,6 @@ namespace ServiceAPIExtensions.Controllers
             var r = LookupRef(parts.First());
 
             string previousPart = "";
-            string ContentType = "";
 
             foreach (var k in parts.Skip(1))
             {           
@@ -352,11 +352,8 @@ namespace ServiceAPIExtensions.Controllers
 
                     var olRef = r;
                     r = contentArea.ContentLink;
-                }else if (previousPart.ToLower().Equals("Create"))
-                {
-                    ContentType = k;
                 }
-                else if (k.ToLower().Equals("main") || k.ToLower().Equals("related") || k.ToLower().Equals("Create"))
+                else if (k.ToLower().Equals("main") || k.ToLower().Equals("related"))
                 {
                     //This part only shows that the next part should be in the MainContentArea or RelatedContentArea, So skip this part.
                     previousPart = k;
@@ -375,16 +372,21 @@ namespace ServiceAPIExtensions.Controllers
             var p = r;
             if (p == ContentReference.EmptyReference) return NotFound();
             int j = 0;
+            var properties = content as IDictionary<string, object>;
+            if (!properties.TryGetValue("ContentType", out object ContentType))
+            {
+                return BadRequest("'ContentType' is a required field.");
+            }
 
-            var ctype = _typerepo.Load(ContentType);
-            if (ctype==null && int.TryParse(ContentType, out j))
+            var ctype = _typerepo.Load((string)ContentType);
+            if (ctype==null && int.TryParse((string)ContentType, out j))
             {
                 ctype = _typerepo.Load(j);
             }
             if (ctype == null) return NotFound();
 
-
-            var properties = content as IDictionary<string, object>;
+            //remove 'ContentType' from properties before iterating properties
+            properties.Remove("ContentType");
 
             if (p == ContentReference.EmptyReference) return NotFound();
 
