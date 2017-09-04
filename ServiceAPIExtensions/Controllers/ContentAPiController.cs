@@ -20,6 +20,7 @@ using EPiServer.Framework.Blobs;
 using System.IO;
 using EPiServer.Web.Routing;
 using EPiServer.Data.Entity;
+using EPiServer.Web.Internal;
 
 namespace ServiceAPIExtensions.Controllers
 {
@@ -38,6 +39,7 @@ namespace ServiceAPIExtensions.Controllers
             if (Ref.ToLower() == "start") return ContentReference.StartPage;
             if (Ref.ToLower() == "globalblock") return ContentReference.GlobalBlockFolder;
             if (Ref.ToLower() == "siteblock") return ContentReference.SiteBlockFolder;
+
             ContentReference c=ContentReference.EmptyReference;
             if (ContentReference.TryParse(Ref, out c)) return c;
             Guid g=Guid.Empty;
@@ -45,16 +47,19 @@ namespace ServiceAPIExtensions.Controllers
             return ContentReference.EmptyReference;
         }
 
-        protected ContentReference LookupRef(ContentReference Parent, string ContentType, string Name)
+        protected ContentReference LookupRef(ContentReference Parent, string Name)
         {
-            var content=_repo.GetChildren<IContent>(Parent).Where(ch => ch.GetType().Name == ContentType && ch.Name == Name).FirstOrDefault();
+            var content = (new UrlSegment(_repo)).GetContentBySegment(Parent, Name);
             if (content == null) return ContentReference.EmptyReference;
-            return content.ContentLink;
+            return content;
         }
 
-
-        //TODO: Query
-        //Region: New approach - dynamic and Expando Objects
+        protected ContentReference LookupRef(ContentReference Parent, string ContentType, string Name)
+        {
+            var content = (new UrlSegment(_repo)).GetContentBySegment(Parent, Name);
+            if (content == null || content.GetType().Name == ContentType) return ContentReference.EmptyReference;
+            return content;
+        }
 
         public static ExpandoObject ConstructExpandoObject(IContent c, string Select=null)
         {
@@ -131,7 +136,7 @@ namespace ServiceAPIExtensions.Controllers
             return e;
         }
 
-        [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/HttpGet, Route("{Reference}/{language?}",Name="GetContentRoute")]
+        [HttpGet, Route("{Reference}/{language?}",Name="GetContentRoute")]
         public virtual IHttpActionResult GetContent(string Reference, string language=null, string Select=null)
         {
             var r=LookupRef(Reference);
@@ -146,7 +151,7 @@ namespace ServiceAPIExtensions.Controllers
         //TODO Languages, versions
 
         //TODO: Get Property, Put Property, Schedule Publish
-        [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/HttpGet, Route("{Reference}/{Property}")]
+        [HttpGet, Route("{Reference}/{Property}")]
         public virtual IHttpActionResult GetProperty(string Reference, string Property)
         {
             var r = LookupRef(Reference);
@@ -156,7 +161,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok(new {Property=cnt.Property[Property].ToWebString()});
         }
 
-        [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/HttpGet, Route("{Reference}/BinaryData")]
+        [HttpGet, Route("{Reference}/binarydata")]
         public virtual IHttpActionResult GetBinaryContent(string Reference)
         {
             var r = LookupRef(Reference);
@@ -173,8 +178,7 @@ namespace ServiceAPIExtensions.Controllers
             }           
         }
 
-
-        [/*AuthorizePermission("EPiServerServiceApi", "WriteAccess"),*/HttpPost, Route("{Reference}/Publish")]
+        [HttpPost, Route("{Reference}/Publish")]
         public virtual IHttpActionResult PublishContent(string Reference)
         {
             var r = LookupRef(Reference);
@@ -183,7 +187,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok();
         }
 
-        [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/HttpGet, Route("{Reference}/children")]
+        [HttpGet, Route("{Reference}/children")]
         public virtual IHttpActionResult ListChildren(string Reference, string Select = null, int Skip = 0, int Take = 100)
         {
             var r = LookupRef(Reference);
@@ -197,32 +201,62 @@ namespace ServiceAPIExtensions.Controllers
             }
             else return Ok();
         }
-        
-        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpPost,HttpGet, Route("{Reference}/query/{contenttype?}")]
-        public virtual IHttpActionResult QueryDescendents(string Reference, [FromBody] ExpandoObject Query, string contenttype = null, string Select = null, int Skip = 0, int Take = 100)
+
+        [HttpDelete, Route("{Reference}")]
+        public virtual IHttpActionResult DeleteContent(string Reference)
         {
             var r = LookupRef(Reference);
             if (r == ContentReference.EmptyReference) return NotFound();
-            var descendents = _repo.GetDescendents(r);
-            List<IContent> ToReturn = new List<IContent>(Take+Skip);
-            int Skipped = 0;
-            foreach (var d in descendents)
+            if (_repo.GetAncestors(r).Any(ic => ic.ContentLink == ContentReference.WasteBasket))
             {
-                var c = _repo.Get<IContent>(d);
-                //if((contenttype!=null) && (c.ContentTypeID))
-                //TODO: Apply Queries
-
-                if (Skip > Skipped) { Skipped++; continue; }
-                ToReturn.Add(c);
-                if (ToReturn.Count == Take) break;
+                //Already in waste basket, delete
+                _repo.Delete(r, false);
             }
-            return Ok(ToReturn.Select(c =>ConstructExpandoObject(c, Select)).ToArray());
+            else _repo.MoveToWastebasket(r);
+            return Ok();
         }
 
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPut, Route("{Reference}")]
-        public virtual IHttpActionResult PutContent(string Reference, [FromBody] ExpandoObject Updated, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
+        [HttpPut, Route("path/{*Path}")]
+        public virtual IHttpActionResult UpdateContentByPath(string Path, [FromBody] ExpandoObject Updated, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
         {
-            var r = LookupRef(Reference);
+            var parts = Path.Split(new char[1] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            var r = LookupRef(parts.First());
+            string previousPart = "";
+
+            foreach (var k in parts.Skip(1))
+            {
+                if (previousPart.ToLower().Equals("main"))
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                }
+                else if (previousPart.ToLower().Equals("related"))
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("RelatedContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                }
+                else if (k.ToLower().Equals("main") || k.ToLower().Equals("related"))
+                {
+                    previousPart = k;
+                    continue;
+                }
+                else
+                {
+                    var oldRef = r;
+                    r = LookupRef(r, k);
+                }
+
+                previousPart = k;
+            }
+
             if (r == ContentReference.EmptyReference) return NotFound();
             var content = (_repo.Get<IContent>(r) as IReadOnly).CreateWritableClone() as IContent;
             var dic=Updated as IDictionary<string, object>;
@@ -236,46 +270,125 @@ namespace ServiceAPIExtensions.Controllers
 
             return Ok( new { reference=rt.ToString()});
         }
-
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpDelete, Route("{Reference}")]
-        public virtual IHttpActionResult DeleteContent(string Reference)
+  
+        [HttpDelete, Route("path/{*Path}")]
+        public virtual IHttpActionResult DeleteContentByPath(string Path)
         {
-            var r = LookupRef(Reference);
+            var parts = Path.Split(new char[1] { '/' },StringSplitOptions.RemoveEmptyEntries);
+            var r = LookupRef(parts.First());
+            string previousPart = "";
+
+            foreach (var k in parts.Skip(1))
+            {
+                if (previousPart.ToLower().Equals("main"))
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                }
+                else if (previousPart.ToLower().Equals("related"))
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("RelatedContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                }
+                else if (k.ToLower().Equals("main") || k.ToLower().Equals("related"))
+                {
+                    //This part only shows that the next part should be in the MainContentArea or RelatedContentArea, So skip this part.
+                    previousPart = k;
+                    continue;
+                }
+                else
+                {
+                    var oldRef = r;
+                    r = LookupRef(r, k);
+                }
+
+                previousPart = k;
+            }
             if (r == ContentReference.EmptyReference) return NotFound();
+
             if (_repo.GetAncestors(r).Any(ic => ic.ContentLink == ContentReference.WasteBasket))
             {
                 //Already in waste basket, delete
                 _repo.Delete(r, false);
-            } else _repo.MoveToWastebasket(r);
+            }
+            else _repo.MoveToWastebasket(r);
+
             return Ok();
+
         }
 
-
-
-        /// <summary>
-        /// Remember to add parameter if it should be published...
-        /// </summary>
-        /// <param name="ParentRef"></param>
-        /// <param name="ContentType"></param>
-        /// <param name="properties"></param>
-        /// <returns></returns>
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPost, Route("{ParentRef}/Create/{ContentType}/{SaveAction?}")]
-        public virtual IHttpActionResult CreateContent(string ParentRef, string ContentType, [FromBody] ExpandoObject content, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
+        [HttpPost, Route("path/{*Path}")]
+        public virtual IHttpActionResult CreateContentByPath(string Path, [FromBody] ExpandoObject content, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
         {
+            var parts = Path.Split(new char[1] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            var r = LookupRef(parts.First());
+
+            string previousPart = "";
+
+            foreach (var k in parts.Skip(1))
+            {           
+                if (previousPart.ToLower().Equals("main"))
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                }
+                else if (previousPart.ToLower().Equals("related"))
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("RelatedContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                }
+                else if (k.ToLower().Equals("main") || k.ToLower().Equals("related"))
+                {
+                    //This part only shows that the next part should be in the MainContentArea or RelatedContentArea, So skip this part.
+                    previousPart = k;
+                    continue;
+                }
+                else
+                {
+                    var oldRef = r;
+                    r = LookupRef(r, k);
+                }
+
+                previousPart = k;
+            }
+
             //Instantiate content of named type
-            var p = LookupRef(ParentRef);
+            var p = r;
             if (p == ContentReference.EmptyReference) return NotFound();
             int j = 0;
+            var properties = content as IDictionary<string, object>;
+            if (!properties.TryGetValue("ContentType", out object ContentType))
+            {
+                return BadRequest("'ContentType' is a required field.");
+            }
 
-            var ctype = _typerepo.Load(ContentType);
-            if (ctype==null && int.TryParse(ContentType, out j))
+            var ctype = _typerepo.Load((string)ContentType);
+            if (ctype==null && int.TryParse((string)ContentType, out j))
             {
                 ctype = _typerepo.Load(j);
             }
             if (ctype == null) return NotFound();
 
+            //remove 'ContentType' from properties before iterating properties
+            properties.Remove("ContentType");
 
-            var properties = content as IDictionary<string, object>;
+            if (p == ContentReference.EmptyReference) return NotFound();
 
             IContent con = _repo.GetDefault<IContent>(p, ctype.ID);
             UpdateContentWithProperties(properties, con);
@@ -283,12 +396,139 @@ namespace ServiceAPIExtensions.Controllers
 
             if (properties.ContainsKey("Name")) con.Name = properties["Name"].ToString();
             EPiServer.DataAccess.SaveAction saveaction = action;
-            if (properties.ContainsKey("SaveAction") && properties["SaveAction"]=="Publish")
+            if (properties.ContainsKey("SaveAction") && (string)properties["SaveAction"]=="Publish")
             {
                 saveaction = EPiServer.DataAccess.SaveAction.Publish;
             }
             var rt=_repo.Save(con, saveaction);
             return Created<object>(new Uri(Url.Link("GetContentRoute",new {Reference=rt.ToReferenceWithoutVersion().ToString()})), new {reference=rt.ToReferenceWithoutVersion().ToString()});
+        }
+
+        [HttpGet, Route("path/{*Path}")]
+        public virtual IHttpActionResult GetContentByPath(string Path)
+        {
+            var parts = Path.Split(new char[1] { '/' },StringSplitOptions.RemoveEmptyEntries);
+            var r = LookupRef(parts.First());
+
+            //Should we really do this?
+            //if (r == ContentReference.EmptyReference) r = ContentReference.GlobalBlockFolder;
+
+            string previousPart = "";
+
+            foreach (var k in parts.Skip(1))
+            {
+                //endpoint for binary data
+                if (k.ToLower().Equals("binarydata")){
+                    var cnt = _repo.Get<IContent>(r);
+
+                    IContent imageContent;
+                    if(cnt.Property.Get("Media") != null)
+                    {
+                        imageContent = cnt;
+                    }
+                    else
+                    {
+                        return NotFound();
+                    }
+                    var md = imageContent as MediaData;
+                    if (md.BinaryData == null) return NotFound();
+                    using (var br = new BinaryReader(md.BinaryData.OpenRead()))
+                    {
+                        var response = new HttpResponseMessage(HttpStatusCode.OK);
+                        response.Content = new ByteArrayContent(br.ReadBytes((int)br.BaseStream.Length));
+                        response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(md.MimeType);
+                        return ResponseMessage(response);
+                    }
+                }
+
+                //endpoint for children
+                if (k.ToLower().Equals("children"))
+                {
+                    var children = _repo.GetChildren<IContent>(r).ToList();
+                    if (children.Count > 0)
+                    {
+                        dynamic e = new ExpandoObject();
+                        e.Children = children.Select(c => ConstructExpandoObject(c, false)).ToArray();
+                        return Ok((ExpandoObject)e);
+                    }
+                }
+
+                if (previousPart.ToLower().Equals("main"))
+                {
+                    var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+                } else if (previousPart.ToLower().Equals("related")) {
+                    var item = _repo.Get<IContent>(r).Property.Get("RelatedContentArea").Value as ContentArea;
+
+                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+
+                    var olRef = r;
+                    r = contentArea.ContentLink;
+
+
+                } else if (k.Equals("main") || k.Equals("related")) {
+                    //This part only shows that the next part should be in the MainContentArea or RelatedContentArea, So skip this part.
+                    previousPart = k;
+                    continue;
+                }
+                else
+                {
+                    var oldRef = r;
+                    r = LookupRef(r, k);
+                }
+
+                previousPart = k;
+            }
+
+            if (r == ContentReference.EmptyReference) return NotFound();
+
+            var content = _repo.Get<IContent>(r);
+
+            return Ok(ConstructExpandoObject(content));
+        }
+
+        [HttpPost, Route("{Ref}/Upload/{name}")]
+        public virtual IHttpActionResult UploadBlob(string Ref, string name, [FromBody] byte[] data)
+        {
+            var r = LookupRef(Ref);
+            if (r == null) return NotFound();
+            var icnt=_repo.Get<IContent>(r);
+            //TODO: Support Chunks - if blob already exist, extend on it.
+
+            if (icnt is MediaData)
+            {
+                var md = (MediaData) (icnt as MediaData).CreateWritableClone();
+                WriteBlobToStorage(name, data, md);
+                _repo.Save(md, EPiServer.DataAccess.SaveAction.Publish); //Should we always publish?
+                return Ok();
+            }
+            return StatusCode(HttpStatusCode.UnsupportedMediaType);
+        }
+
+        [HttpGet, Route("{Ref}/Move/{ParentRef}")]
+        public virtual IHttpActionResult MoveContent(string Ref, string ParentRef)
+        {
+            var a = LookupRef(Ref);
+            var b = LookupRef(ParentRef);
+            if (a == null || b == null) return NotFound();
+            _repo.Move(a, b);
+            return Ok();
+        }
+
+        private void WriteBlobToStorage(string name, byte[] data, MediaData md)
+        {
+            var blob = _blobfactory.CreateBlob(md.BinaryDataContainer, Path.GetExtension(name));
+            using (var s = blob.OpenWrite())
+            {
+                BinaryWriter w = new BinaryWriter(s);
+                w.Write(data);
+                w.Flush();
+            }
+            md.BinaryData = blob;
         }
 
         private void UpdateContentWithProperties(IDictionary<string, object> properties, IContent con)
@@ -338,97 +578,5 @@ namespace ServiceAPIExtensions.Controllers
             }
         }
 
-
-
-
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPost, Route("EnsurePathExist/{ContentType}/{*Path}")]
-        public virtual IHttpActionResult EnsurePathExist(string Path, string ContentType)
-        {
-            //Ensures that the path exists, otherwise create it using ContentType
-            //If first element doesn't exist, assuming globalblock
-            var parts = Path.Split('/');
-            var r = LookupRef(parts.First());
-            if (r == ContentReference.EmptyReference) r = ContentReference.GlobalBlockFolder;
-            IHttpActionResult d = Ok( new { reference = r.ToString() });
-            foreach (var k in parts.Skip(1))
-            {
-                var oldRef = r;
-                //TODO: IF k does not exist at this path
-                r = LookupRef(r, ContentType, k);
-                if (r == ContentReference.EmptyReference)
-                {
-                    dynamic dic = new ExpandoObject();
-                    dic.Name = k;
-                    d = CreateContent(oldRef.ToString(), ContentType, dic, EPiServer.DataAccess.SaveAction.Publish);
-                }
-            }
-            return d;
-        }
-
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"),HttpPost, Route("{Ref}/Upload/{name}")]
-        public virtual IHttpActionResult UploadBlob(string Ref, string name, [FromBody] byte[] data)
-        {
-            var r = LookupRef(Ref);
-            if (r == null) return NotFound();
-            var icnt=_repo.Get<IContent>(r);
-            //TODO: Support Chunks - if blob already exist, extend on it.
-
-            if (icnt is MediaData)
-            {
-                var md = (MediaData) (icnt as MediaData).CreateWritableClone();
-                WriteBlobToStorage(name, data, md);
-                _repo.Save(md, EPiServer.DataAccess.SaveAction.Publish); //Should we always publish?
-                return Ok();
-            }
-            return StatusCode(HttpStatusCode.UnsupportedMediaType);
-        }
-
-
-        private void WriteBlobToStorage(string name, byte[] data, MediaData md)
-        {
-            var blob = _blobfactory.CreateBlob(md.BinaryDataContainer, Path.GetExtension(name));
-            using (var s = blob.OpenWrite())
-            {
-                BinaryWriter w = new BinaryWriter(s);
-                w.Write(data);
-                w.Flush();
-            }
-            md.BinaryData = blob;
-        }
-
-        
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"),HttpGet, Route("{Ref}/Move/{ParentRef}")]
-        public virtual IHttpActionResult MoveContent(string Ref, string ParentRef)
-        {
-            var a = LookupRef(Ref);
-            var b = LookupRef(ParentRef);
-            if (a == null || b == null) return NotFound();
-            _repo.Move(a, b);
-            return Ok();
-        }
-        
-
-        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"),HttpGet,Route("validatewrite")]
-        public virtual bool ValidateWriteAccess()
-        {
-            return true;
-        }
-
-        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpGet, Route("validateread")]
-        public virtual bool ValidateReadAccess()
-        {
-            return true;
-        }
-
-        //Add Blob
-
-        [HttpGet]
-        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"),Route("version")]
-        public virtual ApiVersion Version()
-        {
-            return new ApiVersion() { Component = "ContentAPI", Version = "1.0" };
-        } 
     }
-
-
 }
