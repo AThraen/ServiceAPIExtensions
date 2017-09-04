@@ -136,7 +136,7 @@ namespace ServiceAPIExtensions.Controllers
             return e;
         }
 
-        [HttpGet, Route("{Reference}/{language?}",Name="GetContentRoute")]
+        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpGet, Route("{Reference}/{language?}",Name="GetContentRoute")]
         public virtual IHttpActionResult GetContent(string Reference, string language=null, string Select=null)
         {
             var r=LookupRef(Reference);
@@ -151,7 +151,7 @@ namespace ServiceAPIExtensions.Controllers
         //TODO Languages, versions
 
         //TODO: Get Property, Put Property, Schedule Publish
-        [HttpGet, Route("{Reference}/{Property}")]
+        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpGet, Route("{Reference}/{Property}")]
         public virtual IHttpActionResult GetProperty(string Reference, string Property)
         {
             var r = LookupRef(Reference);
@@ -161,7 +161,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok(new {Property=cnt.Property[Property].ToWebString()});
         }
 
-        [HttpGet, Route("{Reference}/binarydata")]
+        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpGet, Route("{Reference}/binarydata")]
         public virtual IHttpActionResult GetBinaryContent(string Reference)
         {
             var r = LookupRef(Reference);
@@ -187,7 +187,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok();
         }
 
-        [HttpGet, Route("{Reference}/children")]
+        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpGet, Route("{Reference}/children")]
         public virtual IHttpActionResult ListChildren(string Reference, string Select = null, int Skip = 0, int Take = 100)
         {
             var r = LookupRef(Reference);
@@ -202,7 +202,7 @@ namespace ServiceAPIExtensions.Controllers
             else return Ok();
         }
 
-        [HttpDelete, Route("{Reference}")]
+        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpDelete, Route("{Reference}")]
         public virtual IHttpActionResult DeleteContent(string Reference)
         {
             var r = LookupRef(Reference);
@@ -216,7 +216,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok();
         }
 
-        [HttpPut, Route("path/{*Path}")]
+        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPut, Route("path/{*Path}")]
         public virtual IHttpActionResult UpdateContentByPath(string Path, [FromBody] ExpandoObject Updated, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
         {
             var parts = Path.Split(new char[1] { '/' }, StringSplitOptions.RemoveEmptyEntries);
@@ -271,7 +271,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok( new { reference=rt.ToString()});
         }
   
-        [HttpDelete, Route("path/{*Path}")]
+        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpDelete, Route("path/{*Path}")]
         public virtual IHttpActionResult DeleteContentByPath(string Path)
         {
             var parts = Path.Split(new char[1] { '/' },StringSplitOptions.RemoveEmptyEntries);
@@ -325,7 +325,7 @@ namespace ServiceAPIExtensions.Controllers
 
         }
 
-        [HttpPost, Route("path/{*Path}")]
+        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPost, Route("path/{*Path}")]
         public virtual IHttpActionResult CreateContentByPath(string Path, [FromBody] ExpandoObject content, EPiServer.DataAccess.SaveAction action = EPiServer.DataAccess.SaveAction.Save)
         {
             var parts = Path.Split(new char[1] { '/' }, StringSplitOptions.RemoveEmptyEntries);
@@ -404,7 +404,7 @@ namespace ServiceAPIExtensions.Controllers
             return Created<object>(new Uri(Url.Link("GetContentRoute",new {Reference=rt.ToReferenceWithoutVersion().ToString()})), new {reference=rt.ToReferenceWithoutVersion().ToString()});
         }
 
-        [HttpGet, Route("path/{*Path}")]
+        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpGet, Route("path/{*Path}")]
         public virtual IHttpActionResult GetContentByPath(string Path)
         {
             var parts = Path.Split(new char[1] { '/' },StringSplitOptions.RemoveEmptyEntries);
@@ -491,7 +491,7 @@ namespace ServiceAPIExtensions.Controllers
             return Ok(ConstructExpandoObject(content));
         }
 
-        [HttpPost, Route("{Ref}/Upload/{name}")]
+        [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPost, Route("{Ref}/Upload/{name}")]
         public virtual IHttpActionResult UploadBlob(string Ref, string name, [FromBody] byte[] data)
         {
             var r = LookupRef(Ref);
@@ -509,7 +509,7 @@ namespace ServiceAPIExtensions.Controllers
             return StatusCode(HttpStatusCode.UnsupportedMediaType);
         }
 
-        [HttpGet, Route("{Ref}/Move/{ParentRef}")]
+        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpPost, Route("{Ref}/Move/{ParentRef}")]
         public virtual IHttpActionResult MoveContent(string Ref, string ParentRef)
         {
             var a = LookupRef(Ref);

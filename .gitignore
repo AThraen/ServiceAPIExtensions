@@ -1,2 +1,6 @@
 ServiceAPIExtensions/bin/
 ServiceAPIExtensions/obj/
+
+ServiceAPIExtensionsTest/bin/Debug/
+
+ServiceAPIExtensionsTest/obj/Debug/
