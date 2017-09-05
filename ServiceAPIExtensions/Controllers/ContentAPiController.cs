@@ -39,9 +39,10 @@ namespace ServiceAPIExtensions.Controllers
             if (Ref.ToLower() == "start") return ContentReference.StartPage;
             if (Ref.ToLower() == "globalblock") return ContentReference.GlobalBlockFolder;
             if (Ref.ToLower() == "siteblock") return ContentReference.SiteBlockFolder;
+            
 
-            ContentReference c=ContentReference.EmptyReference;
-            if (ContentReference.TryParse(Ref, out c)) return c;
+            if (ContentReference.TryParse(Ref, out ContentReference c)) return c;
+
             Guid g=Guid.Empty;
             if (Guid.TryParse(Ref, out g)) EPiServer.Web.PermanentLinkUtility.FindContentReference(g);
             return ContentReference.EmptyReference;
@@ -50,15 +51,25 @@ namespace ServiceAPIExtensions.Controllers
         protected ContentReference LookupRef(ContentReference Parent, string Name)
         {
             var content = (new UrlSegment(_repo)).GetContentBySegment(Parent, Name);
-            if (content == null) return ContentReference.EmptyReference;
-            return content;
+            if (content != null) return content;
+            else
+            {
+                var temp = _repo.GetChildren<IContent>(Parent).Where(ch => ch.Name == Name).FirstOrDefault();
+                if (temp != null) return temp.ContentLink;
+                else return ContentReference.EmptyReference;
+            }
         }
 
         protected ContentReference LookupRef(ContentReference Parent, string ContentType, string Name)
         {
             var content = (new UrlSegment(_repo)).GetContentBySegment(Parent, Name);
-            if (content == null || content.GetType().Name == ContentType) return ContentReference.EmptyReference;
-            return content;
+            if (content != null) return content;
+            else
+            {
+                var temp = _repo.GetChildren<IContent>(Parent).Where(ch => ch.GetType().Name == ContentType && ch.Name == Name).FirstOrDefault();
+                if (temp != null) return temp.ContentLink;
+                else return ContentReference.EmptyReference;
+            }
         }
 
         public static ExpandoObject ConstructExpandoObject(IContent c, string Select=null)
@@ -70,6 +81,9 @@ namespace ServiceAPIExtensions.Controllers
         {
             dynamic e = new ExpandoObject();
             var dic=e as IDictionary<string,object>;
+
+            if (c == null) return null;
+
             e.Name = c.Name;
             e.ParentLink = c.ParentLink;
             e.ContentGuid = c.ContentGuid;
@@ -141,11 +155,16 @@ namespace ServiceAPIExtensions.Controllers
         {
             var r=LookupRef(Reference);
             if (r == ContentReference.EmptyReference) return NotFound();
-            var cnt = _repo.Get<IContent>(r);
-            if (cnt == null) return NotFound();
-            
-            //TODO: Check permissions for user to content
-            return Ok(ConstructExpandoObject(cnt, Select));
+
+            try
+            {
+                var cnt = _repo.Get<IContent>(r);
+                if (cnt == null) return NotFound();
+                return Ok(ConstructExpandoObject(cnt, Select));
+            } catch (ContentNotFoundException e)
+            {
+                return NotFound();
+            }
         }
 
         //TODO Languages, versions
@@ -192,6 +211,13 @@ namespace ServiceAPIExtensions.Controllers
         {
             var r = LookupRef(Reference);
             if (r == ContentReference.EmptyReference) return NotFound();
+
+            // Check for invalid ID
+            try
+            {
+                _repo.Get<IContent>(r);
+            } catch { return NotFound(); }
+
             var children=_repo.GetChildren<IContent>(r).Skip(Skip).Take(Take).ToList();
             if (children.Count > 0)
             {
@@ -199,7 +225,7 @@ namespace ServiceAPIExtensions.Controllers
                 e.Children = children.Select(c => ConstructExpandoObject(c,false,Select)).ToArray();
                 return Ok((ExpandoObject) e);
             }
-            else return Ok();
+            else return Ok(new ExpandoObject());
         }
 
         [AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpDelete, Route("{Reference}")]
@@ -383,7 +409,16 @@ namespace ServiceAPIExtensions.Controllers
             {
                 ctype = _typerepo.Load(j);
             }
-            if (ctype == null) return NotFound();
+            if (ctype == null) return BadRequest($"Invalid 'ContentType': {ContentType}");
+            
+            if (properties.TryGetValue("Name", out object name))
+            {
+                //var temp = LookupRef(p, (string)name);
+                var temp = _repo.GetChildren<IContent>(p).Where(ch => ch.Name == (string)name).FirstOrDefault();
+                if (temp != null) return BadRequest($"Content with name '{name}' already exists");
+                //_repo.TryGet<IContent>(p, out var content);
+            }
+
 
             //remove 'ContentType' from properties before iterating properties
             properties.Remove("ContentType");
@@ -409,27 +444,19 @@ namespace ServiceAPIExtensions.Controllers
         {
             var parts = Path.Split(new char[1] { '/' },StringSplitOptions.RemoveEmptyEntries);
             var r = LookupRef(parts.First());
-
-            //Should we really do this?
-            //if (r == ContentReference.EmptyReference) r = ContentReference.GlobalBlockFolder;
-
+            
             string previousPart = "";
 
             foreach (var k in parts.Skip(1))
             {
                 //endpoint for binary data
-                if (k.ToLower().Equals("binarydata")){
+                if (k.ToLower().Equals("binarydata"))
+                {
                     var cnt = _repo.Get<IContent>(r);
+                    
+                    if (cnt.Property.Get("Media") == null) return NotFound();
+                    IContent imageContent = cnt;
 
-                    IContent imageContent;
-                    if(cnt.Property.Get("Media") != null)
-                    {
-                        imageContent = cnt;
-                    }
-                    else
-                    {
-                        return NotFound();
-                    }
                     var md = imageContent as MediaData;
                     if (md.BinaryData == null) return NotFound();
                     using (var br = new BinaryReader(md.BinaryData.OpenRead()))
@@ -440,9 +467,7 @@ namespace ServiceAPIExtensions.Controllers
                         return ResponseMessage(response);
                     }
                 }
-
-                //endpoint for children
-                if (k.ToLower().Equals("children"))
+                else if (k.ToLower().Equals("children")) //endpoint for children
                 {
                     var children = _repo.GetChildren<IContent>(r).ToList();
                     if (children.Count > 0)
@@ -451,26 +476,31 @@ namespace ServiceAPIExtensions.Controllers
                         e.Children = children.Select(c => ConstructExpandoObject(c, false)).ToArray();
                         return Ok((ExpandoObject)e);
                     }
+                    else return Ok(new ExpandoObject());
                 }
 
                 if (previousPart.ToLower().Equals("main"))
                 {
                     var item = _repo.Get<IContent>(r).Property.Get("MainContentArea").Value as ContentArea;
 
-                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
-
+                    ContentAreaItem contentArea = item.Items.Where(x => SegmentedName(x.GetContent().Name).Equals(k)).First();
+                    if (contentArea == null)
+                        contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+                    
                     var olRef = r;
                     r = contentArea.ContentLink;
-                } else if (previousPart.ToLower().Equals("related")) {
+                } else if (previousPart.ToLower().Equals("related"))
+                {
                     var item = _repo.Get<IContent>(r).Property.Get("RelatedContentArea").Value as ContentArea;
 
-                    ContentAreaItem contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
+                    ContentAreaItem contentArea = item.Items.Where(x => SegmentedName(x.GetContent().Name).Equals(k)).First();
+                    if (contentArea == null)
+                        contentArea = item.Items.Where(x => x.GetContent().Name.Equals(k)).First();
 
                     var olRef = r;
                     r = contentArea.ContentLink;
-
-
-                } else if (k.Equals("main") || k.Equals("related")) {
+                } else if (k.Equals("main") || k.Equals("related"))
+                {
                     //This part only shows that the next part should be in the MainContentArea or RelatedContentArea, So skip this part.
                     previousPart = k;
                     continue;
@@ -480,6 +510,9 @@ namespace ServiceAPIExtensions.Controllers
                     var oldRef = r;
                     r = LookupRef(r, k);
                 }
+
+                if (r == ContentReference.EmptyReference)
+                    return NotFound();
 
                 previousPart = k;
             }
@@ -576,6 +609,11 @@ namespace ServiceAPIExtensions.Controllers
                 byte[] bytes = Convert.FromBase64String(binitm.Data);
                 WriteBlobToStorage(name, bytes, con as MediaData);
             }
+        }
+
+        private string SegmentedName(string name)
+        {
+            return name.Replace(' ', '-').ToLower();
         }
 
     }
