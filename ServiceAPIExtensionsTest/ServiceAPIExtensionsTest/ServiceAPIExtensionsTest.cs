@@ -123,7 +123,7 @@ namespace ServiceAPIExtensionsTest
             Assert.AreEqual(HttpStatusCode.OK, status);
             Assert.IsTrue(result.HasValues);
             Assert.IsTrue(result.TryGetValue("Children", out _));
-            Assert.AreEqual(8, ((JArray)result["Children"]).Count);
+            Assert.IsNotNull(result["Children"]);
 
             Assert.IsTrue(ValidateChildren(result));
         }
@@ -135,7 +135,7 @@ namespace ServiceAPIExtensionsTest
             Assert.AreEqual(HttpStatusCode.OK, status);
             Assert.IsTrue(result.HasValues);
             Assert.IsTrue(result.TryGetValue("Children", out _));
-            Assert.AreEqual(1, ((JArray)result["Children"]).Count);
+            Assert.IsNotNull(result["Children"]);
 
             Assert.IsTrue(ValidateChildren(result));
         }
@@ -163,7 +163,7 @@ namespace ServiceAPIExtensionsTest
             Assert.AreEqual(HttpStatusCode.OK, status);
             Assert.IsTrue(result.HasValues);
             Assert.IsTrue(result.TryGetValue("Children", out _));
-            Assert.AreEqual(8, ((JArray)result["Children"]).Count);
+            Assert.IsNotNull(result["Children"]);
 
             Assert.IsTrue(ValidateChildren(result));
         }
@@ -176,7 +176,7 @@ namespace ServiceAPIExtensionsTest
             Assert.AreEqual(HttpStatusCode.OK, status);
             Assert.IsTrue(result.HasValues);
             Assert.IsTrue(result.TryGetValue("Children", out _));
-            Assert.AreEqual(2, ((JArray)result["Children"]).Count);
+            Assert.IsNotNull(result["Children"]);
 
             Assert.IsTrue(ValidateChildren(result));
         }
@@ -192,67 +192,78 @@ namespace ServiceAPIExtensionsTest
         #endregion
 
         #region Main Operation
-        [TestMethod, TestCategory("GET"), TestCategory("MAIN")]
+        [TestMethod, TestCategory("GET"), TestCategory("PATH"), TestCategory("MAIN")]
         public void GetMainFromStart()
         {
-            JObject result = Get("/content/start/main", out HttpStatusCode status);
-            Assert.Fail();
-        }
-        
-        [TestMethod, TestCategory("GET"), TestCategory("MAIN")]
-        public void GetMainFromID()
-        {
-            Assert.Fail();
-        }
-
-        [TestMethod, TestCategory("GET"), TestCategory("MAIN")]
-        public void GetMainFromNonExistingID()
-        {
-            Assert.Fail();
+            JObject result = Get("/content/path/start/main/alloy-meet-jumbotron", out HttpStatusCode status);
+            Assert.AreEqual("Alloy Meet jumbotron", result["Name"].ToString());
+            Assert.AreEqual("50", result["ParentLink"].ToString());
+            Assert.AreEqual("51", result["ContentLink"].ToString());
+            Assert.AreEqual("Wherever you meet!", result["Heading"].ToString());
         }
 
         [TestMethod, TestCategory("GET"), TestCategory("PATH"), TestCategory("MAIN")]
-        public void GetMainFromPath()
+        public void GetEmptyMain()
         {
-            Assert.Fail();
+            JObject result = Get("/content/path/start/main/", out HttpStatusCode status);
+            // Is This expected behaviour?
+            Assert.IsTrue(ValidatePage(result));
+            Assert.AreEqual("Start", result["Name"].ToString());
+            Assert.AreEqual("Start", result["PageName"].ToString());
+            Assert.AreEqual("5", result["ContentLink"].ToString());
+            Assert.AreEqual("start", result["PageURLSegment"].ToString());
+            Assert.AreEqual(4, ((JArray)result["MainContentArea"]).Count);
+        }
+
+        [TestMethod, TestCategory("GET"), TestCategory("PATH"), TestCategory("MAIN")]
+        public void GetNonexistingMain()
+        {
+            JObject result = Get("/content/path/start/main/non-existing-main", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.NotFound, status);
         }
 
         [TestMethod, TestCategory("GET"), TestCategory("PATH"), TestCategory("MAIN")]
         public void GetMainFromNonExistingPath()
         {
-            Assert.Fail();
+            JObject result = Get("/content/path/start/non-existing-path/main/some-content", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.NotFound, status);
         }
         #endregion
 
         #region Rel Operation
-        [TestMethod, TestCategory("GET"), TestCategory("REL")]
-        public void GetRelFromStart()
+        [TestMethod, TestCategory("GET"), TestCategory("PATH"), TestCategory("RELATED")]
+        public void GetRelated()
         {
-            Assert.Fail();
+            JObject result = Get("/content/path/start/alloy-plan/related/event-list", out HttpStatusCode status);
+            Assert.AreEqual("Event list", result["Name"].ToString());
+            Assert.AreEqual("62", result["ContentLink"].ToString());
         }
 
-        [TestMethod, TestCategory("GET"), TestCategory("REL")]
-        public void GetRelFromID()
+        [TestMethod, TestCategory("GET"), TestCategory("PATH"), TestCategory("RELATED")]
+        public void GetEmptyRelated()
         {
-            Assert.Fail();
+            JObject result = Get("/content/path/start/related/", out HttpStatusCode status);
+            // Is This expected behaviour?
+            Assert.IsTrue(ValidatePage(result));
+            Assert.AreEqual("Start", result["Name"].ToString());
+            Assert.AreEqual("Start", result["PageName"].ToString());
+            Assert.AreEqual("5", result["ContentLink"].ToString());
+            Assert.AreEqual("start", result["PageURLSegment"].ToString());
+            Assert.AreEqual(4, ((JArray)result["MainContentArea"]).Count);
         }
 
-        [TestMethod, TestCategory("GET"), TestCategory("REL")]
-        public void GetRelFromNonExistingID()
+        [TestMethod, TestCategory("GET"), TestCategory("PATH"), TestCategory("RELATED")]
+        public void GetNonexistingRel()
         {
-            Assert.Fail();
+            JObject result = Get("/content/path/start/related/non-existing-rel", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.NotFound, status);
         }
 
-        [TestMethod, TestCategory("GET"), TestCategory("PATH"), TestCategory("REL")]
-        public void GetRelFromPath()
-        {
-            Assert.Fail();
-        }
-
-        [TestMethod, TestCategory("GET"), TestCategory("PATH"), TestCategory("REL")]
+        [TestMethod, TestCategory("GET"), TestCategory("PATH"), TestCategory("RELATED")]
         public void GetRelFromNonExistingPath()
         {
-            Assert.Fail();
+            JObject result = Get("/content/path/start/non-existing-path/related/some-content", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.NotFound, status);
         }
         #endregion
 
@@ -261,12 +272,12 @@ namespace ServiceAPIExtensionsTest
         public void CreatePage()
         {
             JObject result = Post(TestPagePath, JObject.Parse(
-                "{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"RoflCoptr\"}"), out HttpStatusCode status);
+                "{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"Simple Created Test Page\"}"), out HttpStatusCode status);
             Assert.AreEqual(HttpStatusCode.Created, status);
 
-            result = Get(TestPagePath + "/roflcoptr");
+            result = Get(TestPagePath + "/simple-created-test-page");
             Assert.IsTrue(ValidatePage(result));
-            Assert.AreEqual("RoflCoptr", result["Name"].ToString());
+            Assert.AreEqual("Simple Created Test Page", result["Name"].ToString());
             Assert.AreEqual("StandardPage", result["PageTypeName"].ToString());
         }
 
@@ -287,7 +298,7 @@ namespace ServiceAPIExtensionsTest
         {
             // test that tries to break the properties of a page while creating.
             JObject result = Post(TestPagePath, JObject.Parse(
-                "{\"SaveAction\":\"Publish\", \"ContentType\":\"FAKEPAGE\", \"Name\":\"RoflCoptr\"}"), out HttpStatusCode status);
+                "{\"SaveAction\":\"Publish\", \"ContentType\":\"FAKEPAGE\", \"Name\":\"Simple Test Page\"}"), out HttpStatusCode status);
             Assert.AreEqual(HttpStatusCode.BadRequest, status);
         }
 
@@ -296,7 +307,7 @@ namespace ServiceAPIExtensionsTest
         {
             // test that tries to create a file at a nonexisting path 
             JObject result = Post(TestPagePath + "/nonexisting-path", JObject.Parse(
-                "{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"RoflCoptr\"}"), out HttpStatusCode status);
+                "{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"Simple Test Page\"}"), out HttpStatusCode status);
             Assert.AreEqual(HttpStatusCode.NotFound, status);
         }
         #endregion
@@ -305,17 +316,20 @@ namespace ServiceAPIExtensionsTest
         [TestMethod, TestCategory("DELETE")]
         public void DeletePage()
         {
-            Delete(TestPagePath + "/roflcoptr", out HttpStatusCode status);
+            Post(TestPagePath, JObject.Parse("{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"Simple Delete Test Page\"}"), out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.Created, status);
+
+            Delete(TestPagePath + "/simple-delete-test-page", out status);
             Assert.AreEqual(HttpStatusCode.OK, status);
 
-            Get(TestPagePath + "/roflcoptr", out status);
+            Get(TestPagePath + "/simple-delete-test-page", out status);
             Assert.AreEqual(HttpStatusCode.NotFound, status);
         }
 
         [TestMethod, TestCategory("DELETE")]
         public void DeleteNonExistingPage()
         {
-            Get(TestPagePath + "/roflcoptr", out HttpStatusCode status);
+            Get(TestPagePath + "/non-existing-page", out HttpStatusCode status);
             Assert.AreEqual(HttpStatusCode.NotFound, status);
 
             Delete(TestPagePath + "/non-existing-page", out status);
@@ -323,10 +337,20 @@ namespace ServiceAPIExtensionsTest
         }
 
         [TestMethod, TestCategory("DELETE")]
-        public void DeleteStartPage()
+        public void DeleteRootOfTreeStructure()
         {
-            // Should it be possible to remove the Start page?!
-            Assert.Fail("Please review this test");
+            Post(TestPagePath, JObject.Parse("{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"Simple Test Page\"}"));
+            Post(TestPagePath + "/simple-test-page", JObject.Parse("{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"Test Page One\"}"));
+            Post(TestPagePath + "/simple-test-page", JObject.Parse("{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"Test Page Two\"}"));
+
+            Get(TestPagePath + "/simple-test-page/test-page-one", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.OK, status);
+
+            Delete(TestPagePath + "/simple-test-page", out status);
+            Assert.AreEqual(HttpStatusCode.OK, status);
+
+            Get(TestPagePath + "/simple-test-page/test-page-one", out status);
+            Assert.AreEqual(HttpStatusCode.NotFound, status);
         }
         #endregion
 
@@ -334,19 +358,37 @@ namespace ServiceAPIExtensionsTest
         [TestMethod, TestCategory("UPDATE")]
         public void UpdatePage()
         {
-            Assert.Fail();
+            Post(TestPagePath, JObject.Parse("{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"Simple Test Page One\"}"));
+            Get(TestPagePath + "/simple-test-page-one", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.OK, status);
+            
+            JObject result = Put(TestPagePath + "/simple-test-page-one", JObject.Parse("{\n\"SaveAction\":\"Publish\",\"MetaTitle\": \"Updated Title\"}"), out status);
+            Assert.AreEqual(HttpStatusCode.OK, status);
+
+            result = Get(TestPagePath + "/simple-test-page-one", out status);
+            Assert.AreEqual(HttpStatusCode.OK, status);
+            Assert.AreEqual("Updated Title", result["MetaTitle"].ToString());
         }
 
         [TestMethod, TestCategory("UPDATE")]
         public void UpdateNonExistingPage()
         {
-            Assert.Fail();
+            JObject result = Get("/content/path/start/non-existing-path", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.NotFound, status);
+
+            result = Put("/content/path/start/non-existing-path", JObject.Parse("{\n\"SaveAction\":\"Publish\",\"MetaTitle\": \"Updated Title\"}"), out status);
+            Assert.AreEqual(HttpStatusCode.NotFound, status);
         }
 
         [TestMethod, TestCategory("UPDATE")]
         public void UpdateInvalidInfo()
         {
-            Assert.Fail();
+            Post(TestPagePath, JObject.Parse("{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"Simple Test Page Two\"}"));
+            Get(TestPagePath + "/simple-test-page-two", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.OK, status);
+
+            JObject result = Put(TestPagePath + "/simple-test-page-two", JObject.Parse("{\n\"SaveAction\":\"Publish\",\"InvalidProperty\": \"Content\"}"), out status);
+            Assert.AreEqual(HttpStatusCode.BadRequest, status);
         }
         #endregion
 
@@ -366,6 +408,7 @@ namespace ServiceAPIExtensionsTest
 
         private bool ValidateChildren(JObject data)
         {
+
             return true;
         }
         #endregion
@@ -479,6 +522,7 @@ namespace ServiceAPIExtensionsTest
             HttpRequestMessage httpRequest = new HttpRequestMessage(HttpMethod.Put, BaseURL + path);
             httpRequest.Headers.Authorization = new AuthenticationHeaderValue("bearer", bearer);
             httpRequest.Headers.TryAddWithoutValidation("Content-Type", "application/json");
+            httpRequest.Content = new StringContent(body.ToString(Formatting.None), Encoding.UTF8, "application/json");
 
             HttpClient client = new HttpClient();
             var response = client.SendAsync(httpRequest).Result;
@@ -491,7 +535,6 @@ namespace ServiceAPIExtensionsTest
             string content = response.Content.ReadAsStringAsync().Result;
             return content == "" ? new JObject() : JObject.Parse(content);
         }
-
         #endregion
     }
 }
