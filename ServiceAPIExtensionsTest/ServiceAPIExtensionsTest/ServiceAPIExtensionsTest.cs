@@ -392,6 +392,66 @@ namespace ServiceAPIExtensionsTest
         }
         #endregion
 
+        #region BinaryContent
+
+        [TestMethod, TestCategory("GET"), TestCategory("PATH")]
+        public void GetNonExistentBinaryContentByPath()
+        {
+            JObject result = Get("/content/path/start/BinaryData", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.NotFound, status);
+            Assert.IsFalse(result.HasValues);
+        }
+
+        [TestMethod, TestCategory("GET"), TestCategory("PATH")]
+        public void GetBinaryContentByPath()
+        {
+            JObject result = Get("content/path/58/BinaryData", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.OK, status);
+            Assert.isTrue(result.HasValues);
+            //TODO add verification of binaryData
+        }
+
+        [TestMethod, TestCategory("UPDATE")]
+        public void UpdateBinaryContentOfNonExistingPage()
+        {
+            JObject result = Get("/content/path/start/non-existing-path", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.NotFound, status);
+
+            result = Put("/content/path/start/non-existing-path", JObject.Parse("{\n\"SaveAction\":\"Publish\",\"binarydata\": \"R0lGODlhAQABAIAAAP///////yH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==\"}"), out status);
+            Assert.AreEqual(HttpStatusCode.NotFound, status);
+        }
+
+        [TestMethod, TestCategory("UPDATE")]
+        public void UpdateBinaryContentOfNonMediaType()
+        {
+            Post(TestPagePath, JObject.Parse("{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"Simple Test Page Binary\"}"));
+            Get(TestPagePath + "/simple-test-page-binary", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.OK, status);
+
+            //TODO check if bad request or another status code
+            result = Put(TestPagePath + "/simple-test-page-binary", JObject.Parse("{\n\"SaveAction\":\"Publish\",\"binarydata\": \"R0lGODlhAQABAIAAAP///////yH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==\"}"), out status);
+            Assert.AreEqual(HttpStatusCode.BadRequest, status);
+        }
+
+        [TestMethod, TestCategory("UPDATE")]
+        public void UpdateBinaryContent()
+        {
+            //create page 'simple test page binary two'
+
+            //TODO: change contentType to mediaType
+            Post(TestPagePath, JObject.Parse("{\"SaveAction\":\"Publish\", \"ContentType\":\"ImageFile\", \"Name\":\"Simple Test Page Binary two\"}"));
+            Get(TestPagePath + "/simple-test-page-binary-two", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.OK, status);
+
+            //update the binary content of the media 
+            result = Put(TestPagePath + "/simple-test-page-binary-two", JObject.Parse("{\n\"SaveAction\":\"Publish\",\"binarydata\": \"R0lGODlhAQABAIAAAP///////yH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==\"}"), out status);
+            Assert.AreEqual(HttpStatusCode.OK, status);
+
+            //TODO add more verification
+        }
+
+
+
         #region Validation Methods
         private bool ValidatePage(JObject page)
         {
