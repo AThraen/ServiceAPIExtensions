@@ -35,7 +35,7 @@ namespace ServiceAPIExtensionsTest
             JObject result = Post("/content/path/start", JObject.Parse(
                 "{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"Test Pages\"}"), out HttpStatusCode status);
             if (status != HttpStatusCode.Created)
-                Assert.Fail("Failed to create test page structure");
+                Assert.Fail("Failed to create TestPage structure!");
         }
 
         [ClassCleanup]
@@ -393,25 +393,22 @@ namespace ServiceAPIExtensionsTest
         #endregion
 
         #region BinaryContent
-
-        [TestMethod, TestCategory("GET"), TestCategory("PATH")]
-        public void GetNonExistentBinaryContentByPath()
+        [TestMethod, TestCategory("GET"), TestCategory("BINARY")]
+        public void GetBinaryContent()
         {
-            JObject result = Get("/content/path/start/BinaryData", out HttpStatusCode status);
-            Assert.AreEqual(HttpStatusCode.NotFound, status);
-            Assert.IsFalse(result.HasValues);
-        }
-
-        [TestMethod, TestCategory("GET"), TestCategory("PATH")]
-        public void GetBinaryContentByPath()
-        {
-            JObject result = Get("content/path/58/BinaryData", out HttpStatusCode status);
+            string result = GetBinary("/content/58/BinaryData", out HttpStatusCode status);
             Assert.AreEqual(HttpStatusCode.OK, status);
-            Assert.isTrue(result.HasValues);
-            //TODO add verification of binaryData
+            Assert.AreEqual("PNG", result.Substring(1, 3));
+        }
+        
+        [TestMethod, TestCategory("GET"), TestCategory("BINARY")]
+        public void GetNonExistingBinaryContent()
+        {
+            GetBinary("/content/path/start/non-existing-path", out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.NotFound, status);
         }
 
-        [TestMethod, TestCategory("UPDATE")]
+        [TestMethod, TestCategory("UPDATE"), TestCategory("PATH"), TestCategory("BINARY")]
         public void UpdateBinaryContentOfNonExistingPage()
         {
             JObject result = Get("/content/path/start/non-existing-path", out HttpStatusCode status);
@@ -421,36 +418,33 @@ namespace ServiceAPIExtensionsTest
             Assert.AreEqual(HttpStatusCode.NotFound, status);
         }
 
-        [TestMethod, TestCategory("UPDATE")]
+        [TestMethod, TestCategory("UPDATE"), TestCategory("PATH"), TestCategory("BINARY")]
         public void UpdateBinaryContentOfNonMediaType()
         {
-            Post(TestPagePath, JObject.Parse("{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"Simple Test Page Binary\"}"));
-            Get(TestPagePath + "/simple-test-page-binary", out HttpStatusCode status);
-            Assert.AreEqual(HttpStatusCode.OK, status);
-
-            //TODO check if bad request or another status code
-            result = Put(TestPagePath + "/simple-test-page-binary", JObject.Parse("{\n\"SaveAction\":\"Publish\",\"binarydata\": \"R0lGODlhAQABAIAAAP///////yH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==\"}"), out status);
+            Post(TestPagePath, JObject.Parse("{\"SaveAction\":\"Publish\", \"ContentType\":\"StandardPage\", \"Name\":\"Simple Test Page Binary\"}"), out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.Created, status);
+            
+            JObject result = Put(TestPagePath + "/simple-test-page-binary", JObject.Parse("{\n\"SaveAction\":\"Publish\",\"binarydata\": \"R0lGODlhAQABAIAAAP///////yH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==\"}"), out status);
             Assert.AreEqual(HttpStatusCode.BadRequest, status);
         }
 
-        [TestMethod, TestCategory("UPDATE")]
+        [TestMethod, TestCategory("UPDATE"), TestCategory("PATH"), TestCategory("BINARY")]
         public void UpdateBinaryContent()
         {
-            //create page 'simple test page binary two'
-
             //TODO: change contentType to mediaType
-            Post(TestPagePath, JObject.Parse("{\"SaveAction\":\"Publish\", \"ContentType\":\"ImageFile\", \"Name\":\"Simple Test Page Binary two\"}"));
-            Get(TestPagePath + "/simple-test-page-binary-two", out HttpStatusCode status);
+            Post(TestPagePath, JObject.Parse("{\"SaveAction\":\"Publish\", \"ContentType\":\"ImageFile\", \"Name\":\"test-image.png\", \"BinaryData\": \"R0lGODlhAQABAIAAAP///////yH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==\"}"), out HttpStatusCode status);
+            Assert.AreEqual(HttpStatusCode.Created, status);
+            
+            JObject result = Put(TestPagePath + "/test-image.png", JObject.Parse("{\n\"SaveAction\":\"Publish\",\"BinaryData\": \""+ System.Convert.ToBase64String(Encoding.UTF8.GetBytes("test")) +"\"}"), out status);
             Assert.AreEqual(HttpStatusCode.OK, status);
 
-            //update the binary content of the media 
-            result = Put(TestPagePath + "/simple-test-page-binary-two", JObject.Parse("{\n\"SaveAction\":\"Publish\",\"binarydata\": \"R0lGODlhAQABAIAAAP///////yH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==\"}"), out status);
-            Assert.AreEqual(HttpStatusCode.OK, status);
 
-            //TODO add more verification
+            string content = GetBinary(TestPagePath + "/test-image.png/BinaryData", out status);
+            //string content = GetBinary("/content/"+result["reference"].ToString().Substring(0, 4)+"/BinaryData", out status);
+            Assert.AreEqual(HttpStatusCode.OK, status);
+            Assert.AreEqual("test", content);
         }
-
-
+        #endregion
 
         #region Validation Methods
         private bool ValidatePage(JObject page)
@@ -549,6 +543,29 @@ namespace ServiceAPIExtensionsTest
         {
             JObject result = Get(path, out HttpStatusCode status);
             return func(result, status);
+        }
+
+        static string GetBinary(string path, out HttpStatusCode status)
+        {
+            HttpRequestMessage httpRequest = new HttpRequestMessage(HttpMethod.Get, BaseURL + path);
+            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("bearer", bearer);
+            httpRequest.Headers.TryAddWithoutValidation("Content-Type", "application/json");
+
+            HttpClient client = new HttpClient();
+            var response = client.SendAsync(httpRequest).Result;
+            client.Dispose();
+
+            status = response.StatusCode;
+            if (response.StatusCode != HttpStatusCode.OK)
+                return "";
+
+            string result = "";
+            using (StreamReader sr = new StreamReader(response.Content.ReadAsStreamAsync().Result))
+            {
+                result = sr.ReadToEnd();
+            }
+
+            return result;
         }
 
         static JObject Delete(string path)
