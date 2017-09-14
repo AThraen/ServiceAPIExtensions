@@ -360,19 +360,22 @@ namespace ServiceAPIExtensions.Controllers
             }
 
             // Set the reference name.
+            string _name = "";
             if (properties.ContainsKey("Name"))
             {
-                con.Name = properties["Name"].ToString();
+                _name = properties["Name"].ToString();
                 properties.Remove("Name");
             }
 
             // Set all the other values.
             UpdateContentWithProperties(properties, con, out string error);
             if (!string.IsNullOrEmpty(error)) return BadRequest($"Invalid property '{error}'");
-            
+
             // Save the reference with the requested save action.
+            if (!string.IsNullOrEmpty(_name)) con.Name = _name;
             var rt=_repo.Save(con, saveaction);
-            return Created<object>(new Uri(Url.Link("GetContentRoute",new {Reference=rt.ToReferenceWithoutVersion().ToString()})), new {reference=rt.ToReferenceWithoutVersion().ToString()});
+            return Created<object>(Path, new { reference = rt.ToReferenceWithoutVersion() });
+            //return Created<object>(new Uri(Url.Link("GetContentRoute",new {Reference=rt.ToReferenceWithoutVersion().ToString()})), new {reference=rt.ToReferenceWithoutVersion().ToString()});
         }
 
         [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpGet, Route("path/{*Path}")]
