@@ -366,6 +366,8 @@ namespace ServiceAPIExtensions.Controllers
                 _name = properties["Name"].ToString();
                 properties.Remove("Name");
             }
+            
+            if (!string.IsNullOrEmpty(_name)) con.Name = _name;
 
             // Set all the other values.
             UpdateContentWithProperties(properties, con, out string error);
@@ -503,6 +505,10 @@ namespace ServiceAPIExtensions.Controllers
                 else if (properties[k] is string[])
                 {
                     con.Property[k].Value = properties[k] as string[];
+                }
+                else if (con.Property[k].GetType() == typeof(EPiServer.Core.PropertyDate))
+                {
+                    con.Property[k].ParseToSelf((string)properties[k]);
                 }
                 else
                 {
