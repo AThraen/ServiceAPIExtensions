@@ -21,6 +21,9 @@ using System.IO;
 using EPiServer.Web.Routing;
 using EPiServer.Data.Entity;
 using EPiServer.Web.Internal;
+using System.Reflection;
+using Newtonsoft.Json;
+using System.Text;
 
 namespace ServiceAPIExtensions.Controllers
 {
@@ -428,6 +431,22 @@ namespace ServiceAPIExtensions.Controllers
             var content = _repo.Get<IContent>(r);
             return Ok(ConstructExpandoObject(content));
         }
+
+        [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/ HttpGet, Route("type/{Type}")]
+        public virtual IHttpActionResult GetContentType(string Type)
+        {
+            try
+            {
+                Type t = _typerepo.Load(Type).GetType();
+                PropertyInfo[] info = t.GetProperties();
+
+                return new JsonResult<object>(new { TypeName = Type, Properties = info.Select(x => new { Name = x.Name, Type = x.PropertyType.ToString() }) }, new JsonSerializerSettings(), Encoding.UTF8, this);
+            } catch (NullReferenceException e)
+            {
+                return BadRequest($"Unkown ContentType {Type}");
+            }
+        }
+
 
         /*[AuthorizePermission("EPiServerServiceApi", "WriteAccess"), HttpPost, Route("{Ref}/Upload/{name}")]
         public virtual IHttpActionResult UploadBlob(string Ref, string name, [FromBody] byte[] data)
