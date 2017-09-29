@@ -63,13 +63,18 @@ namespace ServiceAPIExtensions.Controllers
         protected ContentReference LookupRef(ContentReference Parent, string Name)
         {
             var content = (new UrlSegment(_repo)).GetContentBySegment(Parent, Name);
-            if (content != null) return content;
-            else
+            if (content != null && !content.Equals(ContentReference.EmptyReference))
             {
-                var temp = _repo.GetChildren<IContent>(Parent).Where(ch => ch.Name == Name).FirstOrDefault();
-                if (temp != null) return temp.ContentLink;
-                else return ContentReference.EmptyReference;
+                return content;
             }
+            
+            var temp = _repo.GetChildren<IContent>(Parent).Where(ch => SegmentedName(ch.Name) == Name).FirstOrDefault();
+            if (temp != null)
+            {
+                return temp.ContentLink;
+            }
+
+            return ContentReference.EmptyReference;
         }
 
         /// <summary>
