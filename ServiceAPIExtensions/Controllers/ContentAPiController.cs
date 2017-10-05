@@ -63,13 +63,18 @@ namespace ServiceAPIExtensions.Controllers
         protected ContentReference LookupRef(ContentReference Parent, string Name)
         {
             var content = (new UrlSegment(_repo)).GetContentBySegment(Parent, Name);
-            if (content != null) return content;
-            else
+            if (content != null && !content.Equals(ContentReference.EmptyReference))
             {
-                var temp = _repo.GetChildren<IContent>(Parent).Where(ch => ch.Name == Name).FirstOrDefault();
-                if (temp != null) return temp.ContentLink;
-                else return ContentReference.EmptyReference;
+                return content;
             }
+            
+            var temp = _repo.GetChildren<IContent>(Parent).Where(ch => SegmentedName(ch.Name) == Name).FirstOrDefault();
+            if (temp != null)
+            {
+                return temp.ContentLink;
+            }
+
+            return ContentReference.EmptyReference;
         }
 
         /// <summary>
@@ -435,16 +440,22 @@ namespace ServiceAPIExtensions.Controllers
         [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/ HttpGet, Route("type/{Type}")]
         public virtual IHttpActionResult GetContentType(string Type)
         {
-            try
-            {
-                Type t = _typerepo.Load(Type).GetType();
-                PropertyInfo[] info = t.GetProperties();
+            var episerverType = _typerepo.Load(Type);
 
-                return new JsonResult<object>(new { TypeName = Type, Properties = info.Select(x => new { Name = x.Name, Type = x.PropertyType.ToString() }) }, new JsonSerializerSettings(), Encoding.UTF8, this);
-            } catch (NullReferenceException e)
+            if(episerverType==null)
             {
-                return BadRequest($"Unkown ContentType {Type}");
+                return NotFound();
             }
+
+            var page = _repo.GetDefault<IContent>(ContentReference.RootPage, episerverType.ID);
+            //we don't use episerverType.PropertyDefinitions since those don't include everything (PageCreated for example)
+
+            return new JsonResult<object>(new
+                {
+                    TypeName = Type,
+                    Properties = page.Property.Select(p => new { Name = p.Name, Type = p.Type.ToString() })
+                },
+                new JsonSerializerSettings(), Encoding.UTF8, this);
         }
 
 
@@ -527,7 +538,14 @@ namespace ServiceAPIExtensions.Controllers
                 }
                 else if (con.Property[k].GetType() == typeof(EPiServer.Core.PropertyDate))
                 {
-                    con.Property[k].ParseToSelf((string)properties[k]);
+                    if (properties[k] is DateTime)
+                    {
+                        con.Property[k].Value = properties[k];
+                    }
+                    else
+                    {
+                        con.Property[k].ParseToSelf((string)properties[k]);
+                    }
                 }
                 else
                 {
