@@ -383,7 +383,7 @@ namespace ServiceAPIExtensions.Controllers
             //return Created<object>(new Uri(Url.Link("GetContentRoute",new {Reference=rt.ToReferenceWithoutVersion().ToString()})), new {reference=rt.ToReferenceWithoutVersion().ToString()});
         }
 
-        [AuthorizePermission("EPiServerServiceApi", "ReadAccess"), HttpGet, Route("path/{*Path}")]
+        [/*AuthorizePermission("EPiServerServiceApi", "ReadAccess"),*/ HttpGet, Route("path/{*Path}")]
         public virtual IHttpActionResult GetContentByPath(string Path)
         {
             // Extract the method from the path
@@ -400,7 +400,7 @@ namespace ServiceAPIExtensions.Controllers
                 // Get the binary data from the reference.
                 var cnt = _repo.Get<IContent>(r);
 
-                if ((cnt as IBinaryStorable).BinaryData != null)
+                if ((cnt is IBinaryStorable) && (cnt as IBinaryStorable).BinaryData != null)
                 {
                     var binary = cnt as IBinaryStorable;
                     if (binary.BinaryData == null) return NotFound();
@@ -413,7 +413,7 @@ namespace ServiceAPIExtensions.Controllers
                         return ResponseMessage(response);
                     }
                 }
-                else return NotFound();
+                else return BadRequest("Resource does not have binary data");
             } else if (method == "children")
             {
                 // Get all the children from the reference. 
