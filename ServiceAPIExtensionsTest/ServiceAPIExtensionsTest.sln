@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.26730.10
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServiceAPIExtensionsTest", "ServiceAPIExtensionsTest\ServiceAPIExtensionsTest.csproj", "{830E3E8F-FE04-42C5-A5CC-83BE5BBE599D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{830E3E8F-FE04-42C5-A5CC-83BE5BBE599D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{830E3E8F-FE04-42C5-A5CC-83BE5BBE599D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{830E3E8F-FE04-42C5-A5CC-83BE5BBE599D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{830E3E8F-FE04-42C5-A5CC-83BE5BBE599D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {0F86B11F-D2AF-447E-8ADF-DA0BB064A0EC}
+	EndGlobalSection
+EndGlobal

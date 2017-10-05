@@ -26,7 +26,6 @@ namespace ServiceAPIExtensions.Controllers
     {
         protected IContentRepository _repo = ServiceLocator.Current.GetInstance<IContentRepository>();
         protected IContentTypeRepository _typerepo = ServiceLocator.Current.GetInstance<IContentTypeRepository>();
-        protected RawContentRetriever _rc = ServiceLocator.Current.GetInstance<RawContentRetriever>();
         protected BlobFactory _blobfactory = ServiceLocator.Current.GetInstance<BlobFactory>();
         protected ContentMediaResolver _mediaDataResolver = ServiceLocator.Current.GetInstance<ContentMediaResolver>();
 
